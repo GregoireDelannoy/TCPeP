@@ -4,6 +4,7 @@
 #include "matrix.h"
 
 typedef struct payload_t {
+    int indexStart;
     int size;
     uint8_t* data;
 } payload;
@@ -18,15 +19,14 @@ typedef struct clearpacket_t {
     payload payload;
 } clearpacket;
 
-typedef struct clearpacketarray_t {
+typedef struct packetarray_t {
     int nPackets;
-    clearpacket* packets;
-} clearpacketarray;
+    void** packets; // Note, the array can contains either encoded or clear packets. Hence the void type
+} packetarray;
 
 typedef struct encodedpacketpool_t {
     int nPackets;
     encodedpacket* packets;
-    matrix* coeffs;
     matrix* rrefCoeffs;
     matrix* invertedCoeffs;
 } encodedpacketpool;

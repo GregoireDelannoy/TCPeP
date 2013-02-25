@@ -9,20 +9,31 @@
 #define true 1==1
 #define false 1==0
 
-#define PACKET_LENGTH 1
-#define CLEAR_PACKETS 20
-#define ENCODED_PACKETS 30
-#define LOSS 0.2
+#define PACKET_LENGTH 5
+#define CLEAR_PACKETS 10
+#define ENCODED_PACKETS 10
+#define LOSS 0
+#define CODING_WINDOW 10
 
 
-void packetPrint(encodedpacket packet){
+void encodedPacketPrint(encodedpacket packet){
     int i;
     // Print coefficients
-    printf("Coeffs  : ");
+    printf("Coeffs : ");
     for(i = 0; i < packet.nCoeffs ; i++){
         printf("%2x|", packet.coeffs[i]);
     } 
     printf("\n");
+    // Print payload
+    printf("Payload : ");
+    for(i = 0; i < packet.payload.size ; i++){
+        printf("%2x|", packet.payload.data[i]);
+    } 
+    printf("\n");
+}
+
+void clearPacketPrint(clearpacket packet){
+    int i;
     // Print payload
     printf("Payload : ");
     for(i = 0; i < packet.payload.size ; i++){
@@ -37,11 +48,9 @@ void poolPrint(encodedpacketpool pool){
     printf("~~~~~~~~\n");
     for(i = 0; i < pool.nPackets; i++){
         printf("Packet %d : \n", i);
-        packetPrint(pool.packets[i]);
+        encodedPacketPrint(pool.packets[i]);
     } 
     printf("~~~~~~~~\n");
-    printf("Coeffs :\n");
-    mprint(*(pool.coeffs));
     printf("~~~~~~~~\n");
     printf("Reduced coefficients :\n");
     mprint(*(pool.rrefCoeffs));
@@ -61,15 +70,15 @@ int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
     if(pool->nPackets == 0){ // First packet HAS to be added (plus, we're doing some mallocs here)
         pool->nPackets = 1;
         pool->packets = malloc(sizeof(encodedpacket));
-        pool->packets[0] = packet;  
-        pool->coeffs = mcreate(1, packet.nCoeffs);
+        pool->packets[0] = packet;
+        pool->rrefCoeffs = mcreate(1, packet.nCoeffs);
         pool->invertedCoeffs = mcreate(1, packet.nCoeffs);
+        
         for(i = 0; i<packet.nCoeffs; i++){
-            pool->coeffs->data[0][i] = packet.coeffs[i];
+            pool->rrefCoeffs->data[0][i] = packet.coeffs[i];
             pool->invertedCoeffs->data[0][i] = 0;
         }
         pool->invertedCoeffs->data[0][0] = 1; // First packet
-        pool->rrefCoeffs = mcopy(*(pool->coeffs));
 
         factor = pool->rrefCoeffs->data[0][0];
         rowReduce(pool->rrefCoeffs->data[0],factor , packet.nCoeffs);
@@ -114,7 +123,6 @@ int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
             // Append to the pool of encoded packets
             pool->packets = realloc(pool->packets, sizeof(encodedpacket) * (pool->nPackets + 1));
             pool->packets[pool->nPackets] = packet;
-            mAppendVector(pool->coeffs, packet.coeffs);
             mAppendVector(pool->rrefCoeffs, rrefVector);
             mAppendVector(pool->invertedCoeffs, invertedVector);
             pool->nPackets++;
@@ -129,44 +137,35 @@ int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
     return returnValue;
 }
 
-clearpacketarray* extractPacket(encodedpacketpool pool){
+packetarray* extractPacket(encodedpacketpool pool){
     // For each packet, try to reduce its coeff to "0..0 1 0.. 0" ; if done, we can decode.
     encodedpacket currentCodedPacket = pool.packets[0];
-    uint8_t* tempRrefVector;
-    uint8_t* tempInvertedVector;
     uint8_t factor, temp;
     int i, j, k, isReduced;
     clearpacket* currentClearPacket;
-    clearpacketarray* clearPackets = malloc(sizeof(clearpacketarray));
+    packetarray* clearPackets = malloc(sizeof(packetarray));
     clearPackets->nPackets = 0;
     clearPackets->packets = 0;
 
     for(i=0; i < pool.nPackets; i++){
-        tempRrefVector = malloc(currentCodedPacket.nCoeffs * sizeof(uint8_t));
-        tempInvertedVector = malloc(currentCodedPacket.nCoeffs * sizeof(uint8_t));
-    
         currentCodedPacket = pool.packets[i];
-        for(j=0; j < currentCodedPacket.nCoeffs; j++){
-            tempRrefVector[j] = pool.rrefCoeffs->data[i][j];
-            tempInvertedVector[j] = pool.invertedCoeffs->data[i][j];
-        }
         
         for(j=0; j < pool.nPackets; j++){
             if(i!=j){
-                factor = tempRrefVector[j];
-                rowMulSub(tempRrefVector, pool.rrefCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
-                rowMulSub(tempInvertedVector, pool.invertedCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
+                factor = pool.rrefCoeffs->data[i][j];
+                rowMulSub(pool.rrefCoeffs->data[i], pool.rrefCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
+                rowMulSub(pool.invertedCoeffs->data[i], pool.invertedCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
             }
         }
         
         // Test if we really have reduced it :
         isReduced = true;
-        if(tempRrefVector[i] != 0x01){
+        if(pool.rrefCoeffs->data[i][i] != 0x01){
             isReduced = false;
         }
         for(j=0; (j < currentCodedPacket.nCoeffs) && isReduced; j++){
             if(i != j){
-                if(tempRrefVector[j] != 0x00){
+                if(pool.rrefCoeffs->data[i][j] != 0x00){
                     isReduced = false;
                 }
             }
@@ -180,31 +179,31 @@ clearpacketarray* extractPacket(encodedpacketpool pool){
             for(j=0; j < currentClearPacket->payload.size; j++){
                 temp = 0x00;
                 for(k=0; k < pool.nPackets; k++){
-                    temp = gadd(temp, gmul(pool.packets[k].payload.data[j], tempInvertedVector[k]));
+                    temp = gadd(temp, gmul(pool.packets[k].payload.data[j], pool.invertedCoeffs->data[i][k]));
                 }
                 currentClearPacket->payload.data[j] = temp;
             }
             
             // Add it to the array of decoded packets
             clearPackets->packets = realloc(clearPackets->packets, (clearPackets->nPackets + 1) * sizeof(clearpacket));
-            clearPackets->packets[clearPackets->nPackets] = *currentClearPacket;
+            clearPackets->packets[clearPackets->nPackets] = (void*)currentClearPacket;
             clearPackets->nPackets++;
-            
-            // Modify the encoded packet pool according to our last calculations
-            free(pool.rrefCoeffs->data[i]);
-            free(pool.invertedCoeffs->data[i]);
-            pool.rrefCoeffs->data[i] = tempRrefVector;
-            pool.invertedCoeffs->data[i] = tempInvertedVector;            
-        } else {
-            free(tempRrefVector);
-            free(tempInvertedVector);
         }
     }
     
-    
-    
     return clearPackets;
 }
+
+packetarray* handleInClear(clearpacket clearPacket, packetarray clearPacketArray){ // Handle a new incoming clear packet and return array of coded packets to send
+    
+    return 0;
+}
+
+packetarray* handleInCoded(encodedpacket codedPacket, encodedpacketpool* pool){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
+    
+    return 0;
+}
+
 
 int main(int argc, char **argv){
     // Create Encoded packets (sender side)
@@ -238,7 +237,7 @@ int main(int argc, char **argv){
     pool->nPackets = 0;
 
 
-    clearpacketarray* clearArray;
+    packetarray* clearArray;
     int j,k;
     
     for(i = 0; i < ENCODED_PACKETS; i++){
@@ -254,10 +253,8 @@ int main(int argc, char **argv){
                     printf("%d packets decoded in this round\n", clearArray->nPackets);
                     for(j=0; j < clearArray->nPackets; j++){
                         printf("Decoded packet #%d: \n", j);
-                        for(k=0; k < clearArray->packets[j].payload.size; k++){
-                            printf(" %2x ", clearArray->packets[j].payload.data[k]);
-                        }
-                        printf("\n");
+                        clearpacket* currentPacket = clearArray->packets[j];
+                        clearPacketPrint(*currentPacket);
                     }
                 }
             }
