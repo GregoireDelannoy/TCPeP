@@ -1,10 +1,9 @@
 TCPeP
 =====
-
-Performance-Enhancing proxy for TCP over lossy links, using Network Coding methods. Work in progress...
+TCPeP is inteded to be a Performance-Enhancing proxy for TCP over lossy links, using Network Coding methods. This is currently a work in progress...
 
 Network :
-=========
+--------
 UDP tunnel in Python, using examples from secdev.org .
 client => Creates a tun interface, read from it and pass it along to a proxy via UDP.
 Proxy => Creates a tun interface and a UDP socket ; transfer things between them.
@@ -25,11 +24,10 @@ On the Proxy :
   - Set up a NAT to your output interface
     iptables -t nat -A POSTROUTING -o <output interface> -j MASQUERADE
 
-
-and voilà !
+and voilà, a nice little UDP tunneling, that enables you to do whatever you want with the transmitted data !
 
 Encoding :
-==========
+----------
 My own humble try to implement Network Coding, as defined in "Network coding meets tcp : Theory and implementation."
 You might want to read the README.pdf in the encoding directory to get an overview of the method.
 
