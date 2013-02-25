@@ -4,9 +4,9 @@ TCPeP is inteded to be a Performance-Enhancing proxy for TCP over lossy links, u
 
 Network :
 --------
-UDP tunnel in Python, using examples from secdev.org .
-client => Creates a tun interface, read from it and pass it along to a proxy via UDP.
-Proxy => Creates a tun interface and a UDP socket ; transfer things between them.
+UDP tunnel in Python, using examples from secdev.org . The program is divided in two parts :
+  - client => Creates a tun interface, read from it and pass it along to a proxy via UDP.
+  - Proxy => Creates a tun interface and a UDP socket ; transfer things between them.
 
 You will need some iptables magic to make it work ; basically to tell the kernel to use the tun interfaces as we intended.
 On the client :
