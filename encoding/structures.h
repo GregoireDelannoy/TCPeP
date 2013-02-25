@@ -1,12 +1,7 @@
 #ifndef _STRUCTURES_
 #define _STRUCTURES_
 #include <stdint.h>
-
-typedef struct matrix_t {
-    uint8_t** data;
-    int nRows;
-    int nColumns;
-} matrix;
+#include "matrix.h"
 
 typedef struct payload_t {
     int size;

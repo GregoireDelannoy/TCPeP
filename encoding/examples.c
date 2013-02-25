@@ -1,236 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <time.h>
 
-#include "log_tables.h"
 #include "structures.h"
+#include "galois_field.h"
+#include "matrix.h"
 
 #define true 1==1
 #define false 1==0
-#define max(a, b) a<b?b:a
-#define min(a, b) a<b?a:b
 
 #define PACKET_LENGTH 1
 #define CLEAR_PACKETS 20
 #define ENCODED_PACKETS 30
 #define LOSS 0.2
 
-#define MAX_PRINT 20 // Do not print matrices if horiz dimension exceeds it
-
-
-uint8_t gadd(uint8_t a, uint8_t b) {
-    return a ^ b;
-}
-
-uint8_t gsub(uint8_t a, uint8_t b) {
-    return a ^ b;
-}
-
-uint8_t gmul(uint8_t a, uint8_t b) {
-    int result;
-    if((a == 0) || (b == 0)){
-        result = 0;
-    } else {
-        result = ltable[a] + ltable[b]; // Note : this is a normal addition, not gadd
-        result %= 255;
-        /* Get the antilog */
-        result = atable[result];
-    }
-    return result;
-}
-
-uint8_t gdiv(uint8_t a, uint8_t b) {
-    int result;
-    if(a == 0){
-        result = 0;
-    } else if(b == 0){
-        printf("Code tried to divide %x by %x !\n", a, b);
-        exit(1);
-    } else {
-        result = ltable[a] - ltable[b]; // Note : this is a normal addition, not gadd
-        result = (result + 255) % 255;
-        /* Get the antilog */
-        result = atable[result];
-        if(result == 0){
-            printf("Division returned 0 while a = %x", a);
-        }
-    }
-    return result;
-}
-
-uint8_t getRandom(){
-    int n = random(); // Returns a number between 0 and RAND_MAX
-    return (uint8_t)n; 
-}
-
-matrix* mcreate(int rows, int columns){
-    int i;
-    matrix* resultMatrix;
-    resultMatrix = malloc(sizeof(matrix));
-    resultMatrix->data = malloc(rows * sizeof(uint8_t**));
-    resultMatrix->nRows = rows;
-    resultMatrix->nColumns = columns;
-    for(i = 0; i < resultMatrix->nRows; i++){
-        resultMatrix->data[i] = malloc(resultMatrix->nColumns * sizeof(uint8_t*));
-    }
-    return resultMatrix;
-}
-
-matrix* identity(int rows){ // Returns square identity matrix
-    int i, j;
-    matrix* resultMatrix = mcreate(rows, rows);
-    for(i = 0; i < resultMatrix->nRows; i++){
-        for(j = 0; j < resultMatrix->nColumns; j++){
-            if(i==j){
-                resultMatrix->data[i][j] = 1;
-            } else {
-                resultMatrix->data[i][j] = 0;
-            }
-        }
-    }
-    return resultMatrix;
-}
-
-matrix* getRandomMatrix(int rows, int columns){
-    int i, j;
-    matrix* resultMatrix = mcreate(rows, columns);
-
-    for(i = 0; i < resultMatrix->nRows; i++){
-        for(j = 0; j < resultMatrix->nColumns; j++){
-            resultMatrix->data[i][j] = getRandom();
-        }
-    }
-
-    return resultMatrix;
-}
-
-void mprint(matrix m){
-    int i, j;
-    printf("rows = %d, columns = %d\n", m.nRows, m.nColumns);
-    if(m.nColumns > MAX_PRINT){
-        printf("Yo Matrix so fat I not ev' gonna print it.\n");
-        return;
-    }
-
-    for(i = 0; i < m.nRows; i++){
-        printf("|");
-        for(j = 0; j < m.nColumns; j++){
-            printf(" %2x ", m.data[i][j]);
-        }
-        printf("|\n");
-    }
-}
-
-void mfree(matrix* m){
-int i;
-
-    for(i = 0; i < m->nRows; i++){
-        free(m->data[i]);
-    }
-    free(m->data);
-}
-
-matrix* mmul(matrix a, matrix b){
-    int i, j, k;
-    matrix* resultMatrix;
-    uint8_t tmp;
-
-    // Check dimension correctness
-    if(a.nColumns != b.nRows){
-        printf("Error in Matrix dimensions. Cannot continue");
-        exit(1);
-    }
-
-    resultMatrix = mcreate(a.nRows, b.nColumns);
-
-    for(i = 0; i < resultMatrix->nRows; i++){
-        for(j = 0; j < resultMatrix->nColumns; j++){
-            tmp = 0;
-            for(k = 0; k < a.nColumns; k++){
-                tmp = gadd(tmp, gmul(a.data[i][k], b.data[k][j]));
-            } 
-            resultMatrix->data[i][j] = tmp;
-        }
-    }
-    return resultMatrix;
-}
-
-matrix* mcopy(matrix orig){
-    int i,j;
-    matrix* resultMatrix = mcreate(orig.nRows, orig.nColumns);
-
-    for(i = 0; i < resultMatrix->nRows; i++){
-        for(j = 0; j < resultMatrix->nColumns; j++){
-            resultMatrix->data[i][j] = orig.data[i][j];
-        }
-    }
-
-    return resultMatrix;
-}
-
-matrix* mgauss(matrix m){
-    int h,i, j;
-    uint8_t temp;
-    matrix* origMatrix = mcopy(m);
-    matrix* resultMatrix = identity(m.nRows);
-
-    if(m.nRows != m.nColumns){
-        printf("Should give square matrix ! DIE.\n");
-        exit(1);
-    }
-
-    for(h = 0; h < m.nRows ; h++){
-        // Make the first number 1
-        temp = origMatrix->data[h][h];
-        for(j = 0 ; j < m.nRows; j++){
-            origMatrix->data[h][j] = gdiv(origMatrix->data[h][j], temp);
-            resultMatrix->data[h][j] = gdiv(resultMatrix->data[h][j], temp);
-        }
-
-        // Eliminate others
-        for(i = 0; i < m.nRows; i++){
-            if(i != h){ // We do not want to eliminate ourselves !
-                temp = origMatrix->data[i][h];
-                for(j = 0 ; j < m.nRows; j++){
-                    origMatrix->data[i][j] = gsub(origMatrix->data[i][j], gmul(temp, origMatrix->data[h][j]));
-                    resultMatrix->data[i][j] = gsub(resultMatrix->data[i][j], gmul(temp, resultMatrix->data[h][j]));
-                }
-            }
-        }
-    }
-
-    mfree(origMatrix);
-    free(origMatrix);
-    return resultMatrix;
-}
-
-int mEqual(matrix a, matrix b){
-    int i,j;
-    // Test dimensions
-    if((a.nRows != b.nRows) || (a.nColumns != b.nColumns)){
-    return false;
-    }
-
-    // Test each cell
-    for(i = 0; i < a.nRows; i++){
-        for(j = 0; j < a.nColumns; j++){
-            if(a.data[i][j] != b.data[i][j]){
-                return false;
-            }
-        }
-    }
-
-    // No difference has been found, return true.
-    return true;
-}
-
-void mAppendVector(matrix* m, uint8_t* v){
-    // Append a vector v at the bottom of a matrix.
-    m->data = realloc(m->data, sizeof(uint8_t*) * (m->nRows + 1));
-    m->data[m->nRows] = v;
-    m->nRows++; 
-}
 
 void packetPrint(encodedpacket packet){
     int i;
@@ -266,25 +49,10 @@ void poolPrint(encodedpacketpool pool){
     mprint(*(pool.invertedCoeffs));
 }
 
-void rowReduce(uint8_t* row, uint8_t factor, int size){
-    // Reduce a row st row[i] = row[i] / factor
-    int i;
-    for(i = 0; i < size ; i++){
-        row[i] = gdiv(row[i], factor);
-    }
-}
-
-void rowMulSub(uint8_t* a, uint8_t* b, uint8_t coeff, int size){
-    // a = a - b*c
-    int i;
-    for(i = 0; i < size ; i++){
-        a[i] = gsub(a[i], gmul(coeff, b[i]));
-    }
-}
-
 int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
     uint8_t* rrefVector;
     uint8_t* invertedVector;
+    uint8_t* factorVector;
     int i;
     int nullVector;
     uint8_t factor;
@@ -308,18 +76,16 @@ int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
         rowReduce(pool->invertedCoeffs->data[0],factor, packet.nCoeffs);
     } else {
         rrefVector = malloc(packet.nCoeffs * sizeof(uint8_t));
-        invertedVector = malloc(packet.nCoeffs * sizeof(uint8_t));
+        factorVector = malloc(packet.nCoeffs * sizeof(uint8_t));
+        
         // Packet is innovative iff it can not be reduced to a row of zero with previous coefficients
         for(i=0; i<packet.nCoeffs; i++){ // Fill vectors
             rrefVector[i] = packet.coeffs[i];
-            invertedVector[i] = 0;
         }
-        invertedVector[min(pool->nPackets, packet.nCoeffs)] = 1;
 
         for(i=0; i<pool->nPackets; i++){ // Eliminate
-            factor = rrefVector[i];
-            rowMulSub(rrefVector, pool->rrefCoeffs->data[i], factor, packet.nCoeffs);
-            rowMulSub(invertedVector, pool->invertedCoeffs->data[i], factor, packet.nCoeffs);
+            factorVector[i] = rrefVector[i];
+            rowMulSub(rrefVector, pool->rrefCoeffs->data[i], rrefVector[i], packet.nCoeffs);
         }
         nullVector = true;
         for(i=0; i<packet.nCoeffs; i++){
@@ -329,12 +95,23 @@ int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
         }
         if(!nullVector && (rrefVector[pool->nPackets] != 0x00)){ // Packet is innovative. Add to the pool
             printf("Packet is innovative ! Let's add it.\n");
+            
+            // Compute inverted vector (basically, a unity vector to which we apply the same reduction operations)
+            invertedVector = malloc(packet.nCoeffs * sizeof(uint8_t));
+            for(i=0; i<packet.nCoeffs; i++){ // Fill vectors
+                invertedVector[i] = 0;
+            }
+            invertedVector[pool->nPackets] = 1;
+            for(i=0; i<pool->nPackets; i++){ // Eliminate
+                rowMulSub(invertedVector, pool->invertedCoeffs->data[i], factorVector[i], packet.nCoeffs);
+            }
 
-            // Reduce rref to 1
+            // Reduce rref to 1 (and apply to inverted as well)
             factor = rrefVector[pool->nPackets];
             rowReduce(rrefVector, factor, packet.nCoeffs);
             rowReduce(invertedVector, factor, packet.nCoeffs);
 
+            // Append to the pool of encoded packets
             pool->packets = realloc(pool->packets, sizeof(encodedpacket) * (pool->nPackets + 1));
             pool->packets[pool->nPackets] = packet;
             mAppendVector(pool->coeffs, packet.coeffs);
@@ -344,9 +121,9 @@ int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
         } else {
             printf("Packet is not innovative. Dropped.\n");
             free(rrefVector);
-            free(invertedVector);
             returnValue = false;
         }
+        free(factorVector);
     }
     
     return returnValue;
@@ -475,17 +252,20 @@ int main(int argc, char **argv){
                 clearArray = extractPacket(*pool);
                 if(clearArray->nPackets > 0){
                     printf("%d packets decoded in this round\n", clearArray->nPackets);
-                    //for(j=0; j < clearArray->nPackets; j++){
-                        //printf("Decoded packet #%d: \n", j);
-                        //for(k=0; k < clearArray->packets[j].payload.size; k++){
-                            //printf(" %2x ", clearArray->packets[j].payload.data[k]);
-                        //}
-                        //printf("\n");
-                    //}
+                    for(j=0; j < clearArray->nPackets; j++){
+                        printf("Decoded packet #%d: \n", j);
+                        for(k=0; k < clearArray->packets[j].payload.size; k++){
+                            printf(" %2x ", clearArray->packets[j].payload.data[k]);
+                        }
+                        printf("\n");
+                    }
                 }
             }
         }
     }
+    
+    // Clean
+    mfree(Ps);
     
     return 0;
 }
