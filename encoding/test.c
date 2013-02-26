@@ -5,6 +5,7 @@
 #include "structures.h"
 #include "galois_field.h"
 #include "matrix.h"
+#include "packet.h"
 
 #define true 1==1
 #define false 1==0
@@ -62,9 +63,16 @@ int matrixTest(){
     return isOk;
 }
 
+int packetTest(){
+    int isOk = true;
+    
+    
+    return isOk;
+}
+
 
 int main(int argc, char **argv){    
-    if(galoisTest() && matrixTest()){
+    if(galoisTest() && matrixTest() && packetTest()){
         printf("All test passed.\n");
         return 0;
     } else {
