@@ -9,12 +9,27 @@
 #define true 1==1
 #define false 1==0
 
-#define PACKET_LENGTH 5
-#define CLEAR_PACKETS 10
-#define ENCODED_PACKETS 10
+#define PACKET_LENGTH 1500
+#define CLEAR_PACKETS 20
+#define ENCODED_PACKETS 210
 #define LOSS 0
 #define CODING_WINDOW 10
 
+#define MAX_PAYLOAD_PRINT 20
+
+void payloadPrint(payload p){
+    int i;
+    
+    if(p.size < MAX_PAYLOAD_PRINT){
+        printf("Payload : ");
+        for(i = 0; i < p.size ; i++){
+            printf("%2x|", p.data[i]);
+        } 
+        printf("\n");
+    } else {
+        printf("Payload too large to be printed.\n");
+    }
+}
 
 void encodedPacketPrint(encodedpacket packet){
     int i;
@@ -24,22 +39,12 @@ void encodedPacketPrint(encodedpacket packet){
         printf("%2x|", packet.coeffs[i]);
     } 
     printf("\n");
-    // Print payload
-    printf("Payload : ");
-    for(i = 0; i < packet.payload.size ; i++){
-        printf("%2x|", packet.payload.data[i]);
-    } 
-    printf("\n");
+    
+    payloadPrint(packet.payload);
 }
 
 void clearPacketPrint(clearpacket packet){
-    int i;
-    // Print payload
-    printf("Payload : ");
-    for(i = 0; i < packet.payload.size ; i++){
-        printf("%2x|", packet.payload.data[i]);
-    } 
-    printf("\n");
+    payloadPrint(packet.payload);
 }
 
 void poolPrint(encodedpacketpool pool){
