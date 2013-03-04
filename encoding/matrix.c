@@ -9,7 +9,7 @@
 #define false 1==0
 
 
-matrix* mcreate(int rows, int columns){
+matrix* mCreate(int rows, int columns){
     int i;
     matrix* resultMatrix;
     resultMatrix = malloc(sizeof(matrix));
@@ -24,7 +24,7 @@ matrix* mcreate(int rows, int columns){
 
 matrix* getIdentityMatrix(int rows){ // Returns square identity matrix
     int i, j;
-    matrix* resultMatrix = mcreate(rows, rows);
+    matrix* resultMatrix = mCreate(rows, rows);
     for(i = 0; i < resultMatrix->nRows; i++){
         for(j = 0; j < resultMatrix->nColumns; j++){
             if(i==j){
@@ -39,7 +39,7 @@ matrix* getIdentityMatrix(int rows){ // Returns square identity matrix
 
 matrix* getRandomMatrix(int rows, int columns){
     int i, j;
-    matrix* resultMatrix = mcreate(rows, columns);
+    matrix* resultMatrix = mCreate(rows, columns);
 
     for(i = 0; i < resultMatrix->nRows; i++){
         for(j = 0; j < resultMatrix->nColumns; j++){
@@ -50,7 +50,7 @@ matrix* getRandomMatrix(int rows, int columns){
     return resultMatrix;
 }
 
-void mprint(matrix m){
+void mPrint(matrix m){
     int i, j;
     printf("rows = %d, columns = %d\n", m.nRows, m.nColumns);
     if(m.nColumns > MAX_PRINT){
@@ -67,7 +67,7 @@ void mprint(matrix m){
     }
 }
 
-void mfree(matrix* m){
+void mFree(matrix* m){
 int i;
 
     for(i = 0; i < m->nRows; i++){
@@ -77,7 +77,7 @@ int i;
     free(m);
 }
 
-matrix* mmul(matrix a, matrix b){
+matrix* mMul(matrix a, matrix b){
     int i, j, k;
     matrix* resultMatrix;
     uint8_t tmp;
@@ -88,7 +88,7 @@ matrix* mmul(matrix a, matrix b){
         exit(1);
     }
 
-    resultMatrix = mcreate(a.nRows, b.nColumns);
+    resultMatrix = mCreate(a.nRows, b.nColumns);
 
     for(i = 0; i < resultMatrix->nRows; i++){
         for(j = 0; j < resultMatrix->nColumns; j++){
@@ -102,9 +102,9 @@ matrix* mmul(matrix a, matrix b){
     return resultMatrix;
 }
 
-matrix* mcopy(matrix orig){
+matrix* mCopy(matrix orig){
     int i,j;
-    matrix* resultMatrix = mcreate(orig.nRows, orig.nColumns);
+    matrix* resultMatrix = mCreate(orig.nRows, orig.nColumns);
 
     for(i = 0; i < resultMatrix->nRows; i++){
         for(j = 0; j < resultMatrix->nColumns; j++){
@@ -115,10 +115,10 @@ matrix* mcopy(matrix orig){
     return resultMatrix;
 }
 
-matrix* mgauss(matrix m){
+matrix* mGauss(matrix m){
     int h,i, j;
     uint8_t temp;
-    matrix* origMatrix = mcopy(m);
+    matrix* origMatrix = mCopy(m);
     matrix* resultMatrix = getIdentityMatrix(m.nRows);
 
     if(m.nRows != m.nColumns){
@@ -146,7 +146,7 @@ matrix* mgauss(matrix m){
         }
     }
 
-    mfree(origMatrix);
+    mFree(origMatrix);
     return resultMatrix;
 }
 

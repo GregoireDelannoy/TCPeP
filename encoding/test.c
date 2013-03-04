@@ -43,22 +43,22 @@ int matrixTest(){
     // Create & Destroy Matrices
     a = getRandomMatrix(1000,1000);
     b = getRandomMatrix(1000,1000);
-    mfree(a);
-    mfree(b);
+    mFree(a);
+    mFree(b);
     
     
     // Gaussian elimination
     a = getRandomMatrix(4, 4);
     identity = getIdentityMatrix(4);
-    b = mgauss(*a);
-    result = mmul(*a, *b);
+    b = mGauss(*a);
+    result = mMul(*a, *b);
     
     if(!mEqual(*identity, *result)){
         printf("matrix gauss or multiplication failed\n");
         isOk = false;
     }
     
-    mfree(a);mfree(b);mfree(identity);mfree(result);
+    mFree(a);mFree(b);mFree(identity);mFree(result);
     
     return isOk;
 }

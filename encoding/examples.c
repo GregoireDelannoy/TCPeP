@@ -32,8 +32,8 @@
         //pool->nPackets = 1;
         //pool->packets = malloc(sizeof(encodedpacket));
         //pool->packets[0] = packet;
-        //pool->rrefCoeffs = mcreate(1, packet.nCoeffs);
-        //pool->invertedCoeffs = mcreate(1, packet.nCoeffs);
+        //pool->rrefCoeffs = mCreate(1, packet.nCoeffs);
+        //pool->invertedCoeffs = mCreate(1, packet.nCoeffs);
         
         //for(i = 0; i<packet.nCoeffs; i++){
             //pool->rrefCoeffs->data[0][i] = packet.coeffs[i];
@@ -158,6 +158,8 @@
 encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* clearPacketArray){ // Handle a new incoming clear packet and return array of coded packets to send
     static float NUM = 0;
     int i;
+    encodedpacketarray* ret = malloc(sizeof(encodedpacketarray));
+    ret->nPackets = 0;
     
     // If the packet is a control packet, pass it along
     
@@ -177,12 +179,14 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
     // Keep only the fractional part
     NUM = NUM - (int)NUM;
     
-    return 0;
+    return ret;
 }
 
-clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderbuffer* buffer){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
+clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderpool* buffer){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
+    clearpacketarray* ret = malloc(sizeof(clearpacketarray));
+    ret->nPackets = 0;
     
-    return 0;
+    return ret;
 }
 
 
@@ -190,7 +194,12 @@ int main(int argc, char **argv){
     int i,j,k;
     // Persistent allocations
     clearpacketarray* encoderBuffer = malloc(sizeof(clearpacketarray));
-    decoderbuffer* decoderBuffer = malloc(sizeof(decoderbuffer));
+    encoderBuffer->nPackets = 0;
+    decoderpool* decoderBuffer = malloc(sizeof(decoderpool));
+    decoderBuffer->rrefCoeffs = mCreate(0,0);
+    decoderBuffer->invertedCoeffs = mCreate(0,0);
+    decoderBuffer->array = malloc(sizeof(encodedpacketarray));
+    decoderBuffer->array->nPackets = 0;
     
     // Transient allocations
     clearpacket* currentClearPacket;
@@ -201,7 +210,7 @@ int main(int argc, char **argv){
     // Generate clear packets
     matrix* Ps = getRandomMatrix(CLEAR_PACKETS, PACKET_LENGTH);
     printf("Original Packets : \n");
-    mprint(*Ps);
+    mPrint(*Ps);
     
     // Pass packets to the clear handler and pipe the output to the coded handler
     for(i=0; i<CLEAR_PACKETS; i++){
@@ -221,20 +230,20 @@ int main(int argc, char **argv){
             for(k = 0; j < decoderReturn->nPackets;k++){ // For each clear packets returned
                 // Send packets to the TCP application
             }
+            clearArrayFree(decoderReturn);
         }
         
         encodedArrayFree(encoderReturn);
-        clearArrayFree(decoderReturn);
         clearPacketFree(currentClearPacket);
     }
     
     // Clean
-    mfree(Ps);
+    mFree(Ps);
     clearArrayFree(encoderBuffer);
-    mfree(decoderBuffer->rrefCoeffs);
-    mfree(decoderBuffer->invertedCoeffs);
     encodedArrayFree(decoderBuffer->array);
-    
+    mFree(decoderBuffer->rrefCoeffs);
+    mFree(decoderBuffer->invertedCoeffs);
+    free(decoderBuffer);
     
     //// Gen Encoded Packets
     //encodedpacket** encodedData = malloc(ENCODED_PACKETS * (sizeof (encodedpacket*)));
@@ -247,12 +256,12 @@ int main(int argc, char **argv){
         //// Generate Coefficients
         //matrix* currentCoeffs = getRandomMatrix(1, CLEAR_PACKETS);
         ////printf("Coeffs :\n");
-        ////mprint(*currentCoeffs);
+        ////mPrint(*currentCoeffs);
         //encodedData[i]->coeffs = currentCoeffs->data[0];
         //// Compute encoded packet
-        //matrix* encodedPacket = mmul(*currentCoeffs, *Ps);  
+        //matrix* encodedPacket = mMul(*currentCoeffs, *Ps);  
         ////printf("Encoded packet #%d:\n", i);
-        ////mprint(*encodedPacket);
+        ////mPrint(*encodedPacket);
         //encodedData[i]->payload.data = encodedPacket->data[0];
     //}
 

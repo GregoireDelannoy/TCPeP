@@ -11,21 +11,21 @@ typedef struct matrix_t {
 } matrix;
 
 
-matrix* mcreate(int rows, int columns);
+matrix* mCreate(int rows, int columns);
 
 matrix* getIdentityMatrix(int rows);
 
 matrix* getRandomMatrix(int rows, int columns);
 
-void mprint(matrix m);
+void mPrint(matrix m);
 
-void mfree(matrix* m);
+void mFree(matrix* m);
 
-matrix* mmul(matrix a, matrix b);
+matrix* mMul(matrix a, matrix b);
 
-matrix* mcopy(matrix orig);
+matrix* mCopy(matrix orig);
 
-matrix* mgauss(matrix m);
+matrix* mGauss(matrix m);
 
 int mEqual(matrix a, matrix b);
 

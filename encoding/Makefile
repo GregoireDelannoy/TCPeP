@@ -13,6 +13,9 @@ all:$(OBJ) examples.o test.o
 run:all
 	./examples
 
+runMem:all
+	valgrind --leak-check=full ./examples
+
 test:all
 	./test
 
