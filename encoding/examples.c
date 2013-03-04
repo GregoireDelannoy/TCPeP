@@ -11,7 +11,7 @@
 #define true 1==1
 #define false 1==0
 
-#define PACKET_LENGTH 1500
+#define PACKET_LENGTH 15
 #define CLEAR_PACKETS 20
 #define ENCODED_PACKETS 210
 #define LOSS 0.2
@@ -156,28 +156,36 @@
 //}
 
 encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* clearPacketArray){ // Handle a new incoming clear packet and return array of coded packets to send
-    static float NUM = 0;
+    static float NUM = 0; // WARNING ! Be cautious with that variable !
     int i;
     encodedpacketarray* ret = malloc(sizeof(encodedpacketarray));
     ret->nPackets = 0;
+    ret->packets = 0;
     
-    // If the packet is a control packet, pass it along
-    
-    // If the packet is not already in the coding buffer, add it
-    
-    
-    NUM = NUM + REDUNDANCY_FACTOR;
-    
-    for(i=0; i < NUM; i++){
-        // Generate a random combination of packets in the coding window
+    //If the packet is a control packet, pass it along
+    if(clearPacket.type == TYPE_CONTROL){
+        printf("Received a control packet\n");
+        encodedpacket* currentEncodedPacket = malloc(sizeof(encodedpacket));
+        currentEncodedPacket->payload = payloadCreate(clearPacket.payload->size, clearPacket.payload->data);
+        currentEncodedPacket->coeffs = 0;
+        encodedArrayAppend(ret, currentEncodedPacket);
+    } else if(clearPacket.type == TYPE_DATA) {
         
-        // Add headers
+        // If the packet is not already in the coding buffer, add it
         
-        // Add the packet to the array
+        NUM = NUM + REDUNDANCY_FACTOR;
+        
+        for(i=0; i < NUM; i++){
+            // Generate a random combination of packets in the coding window
+            
+            // Add headers
+            
+            // Add the packet to the array
+        }
+        
+        // Keep only the fractional part
+        NUM = NUM - (int)NUM;
     }
-    
-    // Keep only the fractional part
-    NUM = NUM - (int)NUM;
     
     return ret;
 }
@@ -185,6 +193,7 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
 clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderpool* buffer){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
     clearpacketarray* ret = malloc(sizeof(clearpacketarray));
     ret->nPackets = 0;
+    ret->packets = 0;
     
     return ret;
 }
@@ -195,11 +204,13 @@ int main(int argc, char **argv){
     // Persistent allocations
     clearpacketarray* encoderBuffer = malloc(sizeof(clearpacketarray));
     encoderBuffer->nPackets = 0;
+    encoderBuffer->packets = 0;
     decoderpool* decoderBuffer = malloc(sizeof(decoderpool));
     decoderBuffer->rrefCoeffs = mCreate(0,0);
     decoderBuffer->invertedCoeffs = mCreate(0,0);
     decoderBuffer->array = malloc(sizeof(encodedpacketarray));
     decoderBuffer->array->nPackets = 0;
+    decoderBuffer->array->packets = 0;
     
     // Transient allocations
     clearpacket* currentClearPacket;
@@ -214,9 +225,16 @@ int main(int argc, char **argv){
     
     // Pass packets to the clear handler and pipe the output to the coded handler
     for(i=0; i<CLEAR_PACKETS; i++){
-        printf("Round start : generating clear packet #%d.\n", i);
-        // Form a correct clear packet :
-        currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, Ps->data[i]);
+        printf("\nRound start : generating clear packet #%d.\n", i);
+        
+        if(i != 0){
+            // Form a correct clear packet :
+            currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, Ps->data[i]);
+            currentClearPacket->type = TYPE_DATA;
+        } else {
+            currentClearPacket = clearPacketCreate(0, 10, Ps->data[0]);
+            currentClearPacket->type = TYPE_CONTROL;
+        }
         
         // Handle it
         encoderReturn = handleInClear(*currentClearPacket, encoderBuffer);
