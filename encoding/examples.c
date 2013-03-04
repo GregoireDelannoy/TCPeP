@@ -18,21 +18,6 @@
 #define CODING_WINDOW 10
 #define REDUNDANCY_FACTOR 1.5
 
-void poolPrint(encodedpacketpool pool){
-    int i;
-    printf("%d packets in pool : \n", pool.nPackets);
-    printf("~~~~~~~~\n");
-    for(i = 0; i < pool.nPackets; i++){
-        printf("Packet %d : \n", i);
-        encodedPacketPrint(pool.packets[i]);
-    } 
-    printf("~~~~~~~~\n");
-    printf("~~~~~~~~\n");
-    printf("Reduced coefficients :\n");
-    mprint(*(pool.rrefCoeffs));
-    printf("Inverted coefficients :\n");
-    mprint(*(pool.invertedCoeffs));
-}
 
 //int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
     //uint8_t* rrefVector;
@@ -195,19 +180,24 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
     return 0;
 }
 
-clearpacketarray* handleInCoded(encodedpacket codedPacket, encodedpacketpool* pool){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
+clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderbuffer* buffer){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
     
     return 0;
 }
 
 
 int main(int argc, char **argv){
-    int i;
-    clearpacket* currentClearPacket;
-    clearpacketarray* cpArray = malloc(sizeof(clearpacketarray));
-    encodedpacketpool* epPool = malloc(sizeof(encodedpacketpool));
-    // Create Encoded packets (sender side)
+    int i,j,k;
+    // Persistent allocations
+    clearpacketarray* encoderBuffer = malloc(sizeof(clearpacketarray));
+    decoderbuffer* decoderBuffer = malloc(sizeof(decoderbuffer));
     
+    // Transient allocations
+    clearpacket* currentClearPacket;
+    encodedpacketarray* encoderReturn;
+    clearpacketarray* decoderReturn;
+    
+        
     // Generate clear packets
     matrix* Ps = getRandomMatrix(CLEAR_PACKETS, PACKET_LENGTH);
     printf("Original Packets : \n");
@@ -215,21 +205,36 @@ int main(int argc, char **argv){
     
     // Pass packets to the clear handler and pipe the output to the coded handler
     for(i=0; i<CLEAR_PACKETS; i++){
+        printf("Round start : generating clear packet #%d.\n", i);
         // Form a correct clear packet :
         currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, Ps->data[i]);
         
         // Handle it
-        handleInClear(
+        encoderReturn = handleInClear(*currentClearPacket, encoderBuffer);
+        printf("%d encoded packets generated during this round.\n", encoderReturn->nPackets);
         
+        // Pipe the generated packets to the coded handler
+        for(j = 0; j < encoderReturn->nPackets;j++){
+            decoderReturn = handleInCoded(*(encoderReturn->packets[j]), decoderBuffer);
+            printf("%d clear packet recovered during this round.\n", decoderReturn->nPackets);
+            
+            for(k = 0; j < decoderReturn->nPackets;k++){ // For each clear packets returned
+                // Send packets to the TCP application
+            }
+        }
         
+        encodedArrayFree(encoderReturn);
+        clearArrayFree(decoderReturn);
         clearPacketFree(currentClearPacket);
     }
     
     // Clean
     mfree(Ps);
-    free(cpArray->packets);
-    free(cpArray);
-    free(epPool)
+    clearArrayFree(encoderBuffer);
+    mfree(decoderBuffer->rrefCoeffs);
+    mfree(decoderBuffer->invertedCoeffs);
+    encodedArrayFree(decoderBuffer->array);
+    
     
     //// Gen Encoded Packets
     //encodedpacket** encodedData = malloc(ENCODED_PACKETS * (sizeof (encodedpacket*)));

@@ -4,11 +4,10 @@
 #include "matrix.h"
 #include "packet.h"
 
-typedef struct encodedpacketpool_t {
-    int nPackets;
-    encodedpacket* packets;
+typedef struct decoderbuffer_t {
+    encodedpacketarray* array;
     matrix* rrefCoeffs;
     matrix* invertedCoeffs;
-} encodedpacketpool;
+} decoderbuffer;
 
 #endif
