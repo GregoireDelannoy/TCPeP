@@ -36,6 +36,7 @@ void encodedPacketPrint(encodedpacket packet){
     payloadPrint(*(packet.payload));
 }
 
+
 void encodedPacketFree(encodedpacket* p){
     if(p->coeffs != 0){
         // Clean coeffs
@@ -59,6 +60,8 @@ clearpacket* clearPacketCreate(int index, int size, uint8_t* data){
     
     ret->indexStart = index;
     ret->payload = p;
+    
+    ret->type = TYPE_DATA; // By default, data
     
     return ret;
 }

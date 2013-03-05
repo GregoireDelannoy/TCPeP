@@ -51,6 +51,8 @@ void clearPacketFree(clearpacket* p);
 
 payload* payloadCreate(int size, uint8_t* data);
 
+void encodedPacketFree(encodedpacket* p);
+
 void payloadFree(payload* p);
 
 void encodedArrayFree(encodedpacketarray* a);

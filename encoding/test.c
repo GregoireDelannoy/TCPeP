@@ -7,8 +7,7 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define true 1==1
-#define false 1==0
+
 
 int galoisTest(){
     uint8_t a,b,c;
@@ -65,14 +64,32 @@ int matrixTest(){
 
 int packetTest(){
     int isOk = true;
+    uint8_t data[2] = {0xFF, 0xFF};
     
+    clearpacket* cp = clearPacketCreate(10, 2, data);
+    encodedpacket* ep = malloc(sizeof(encodedpacket));
+    ep->payload = payloadCreate(2, data);
+    ep->coeffs = malloc(sizeof(coeffs));    
+    
+    clearPacketFree(cp);
+    encodedPacketFree(ep);
     
     return isOk;
 }
 
+int maxMinTest(){
+    printf("max(1,10) = %d\n", min(1,10));
+    
+    if((max(1,2) == 2) && (min(2,1) == 1)){
+        return true;
+    } else {
+        return false;
+    }
+}
+
 
 int main(int argc, char **argv){    
-    if(galoisTest() && matrixTest() && packetTest()){
+    if(galoisTest() && matrixTest() && packetTest() && maxMinTest()){
         printf("All test passed.\n");
         return 0;
     } else {

@@ -84,7 +84,7 @@ matrix* mMul(matrix a, matrix b){
 
     // Check dimension correctness
     if(a.nColumns != b.nRows){
-        printf("Error in Matrix dimensions. Cannot continue");
+        printf("Error in Matrix dimensions. Cannot continue\n");
         exit(1);
     }
 

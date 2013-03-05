@@ -3,7 +3,7 @@ CFLAGS = -Wall -g
 
 OBJ = galois_field.o matrix.o  packet.o
 
-%.o: %.c
+%.o: %.c %.h
 	$(CC) $(CFLAGS) -c $<
 
 all:$(OBJ) examples.o test.o
