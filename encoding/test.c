@@ -78,11 +78,10 @@ int packetTest(){
 }
 
 int maxMinTest(){
-    printf("max(1,10) = %d\n", min(1,10));
-    
     if((max(1,2) == 2) && (min(2,1) == 1)){
         return true;
     } else {
+        printf("Min/Max failed\n");
         return false;
     }
 }
