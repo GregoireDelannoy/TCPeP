@@ -8,11 +8,11 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define PACKET_LENGTH 15
-#define CLEAR_PACKETS 10
-#define LOSS 0.1
+#define PACKET_LENGTH 1500
+#define CLEAR_PACKETS 1000
+#define LOSS 0.4
 #define CODING_WINDOW 10
-#define REDUNDANCY_FACTOR 1.5
+#define REDUNDANCY_FACTOR 2
 
 
 //int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
@@ -253,7 +253,7 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderpool* buffer){
         currentClearPacket->type = TYPE_CONTROL;
         clearArrayAppend(ret, currentClearPacket);
     } else {
-        
+        // Retrieve the coding vector
     }
     
     return ret;
@@ -302,9 +302,13 @@ int main(int argc, char **argv){
         encoderReturn = handleInClear(*currentClearPacket, encoderBuffer);
         printf("%d encoded packets generated during this round.\n", encoderReturn->nPackets);
         
-        // Pipe the generated packets to the coded handler
+        // Pipe the generated packets to the coded handler, with loss
         for(j = 0; j < encoderReturn->nPackets;j++){
-            decoderReturn = handleInCoded(*(encoderReturn->packets[j]), decoderBuffer);
+            if(((1.0 * random())/RAND_MAX) < LOSS){
+                printf("\nEncoded packet #%d has been lost\n", j);
+            } else {
+                printf("\nReceived encoded packet #%d\n", j);
+                decoderReturn = handleInCoded(*(encoderReturn->packets[j]), decoderBuffer);
             printf("%d clear packet recovered during this round.\n", decoderReturn->nPackets);
             
             for(k = 0; k < decoderReturn->nPackets;k++){ // For each clear packets returned
@@ -313,6 +317,7 @@ int main(int argc, char **argv){
                 clearPacketPrint(*(decoderReturn->packets[k]));
             }
             clearArrayFree(decoderReturn);
+            }
         }
         
         encodedArrayFree(encoderReturn);

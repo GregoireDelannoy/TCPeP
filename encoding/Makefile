@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -pg
 
 OBJ = galois_field.o matrix.o  packet.o
 
@@ -7,8 +7,8 @@ OBJ = galois_field.o matrix.o  packet.o
 	$(CC) $(CFLAGS) -c $<
 
 all:$(OBJ) examples.o test.o
-	gcc -g -Wall $(OBJ) examples.o -o examples
-	gcc -g -Wall $(OBJ) test.o -o test
+	gcc $(CFLAGS) $(OBJ) examples.o -o examples
+	gcc $(CFLAGS) $(OBJ) test.o -o test
 
 run:all
 	./examples
