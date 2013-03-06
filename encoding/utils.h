@@ -10,12 +10,10 @@
 #define true 1==1
 #define false 1==0
 
-
-typedef struct decoderpool_t {
-    encodedpacketarray* array;
-    matrix* rrefCoeffs;
-    matrix* invertedCoeffs;
-} decoderpool;
+typedef struct clearinfos_t {
+    uint32_t start;
+    uint16_t size;
+} clearinfos;
 
 #endif
 

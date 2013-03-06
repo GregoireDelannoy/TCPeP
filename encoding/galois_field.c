@@ -149,21 +149,18 @@ uint8_t gsub(uint8_t a, uint8_t b) {
 }
 
 uint8_t gmul(uint8_t a, uint8_t b) {
-    uint8_t result;
     if((a == 0) || (b == 0)){
-        result = 0;
+        return 0;
     } else {
         /* Get the antilog */
         //result = atable[(ltable[a] + ltable[b])%255];
-        result = atable[ltable[a] + ltable[b]];
+        return atable[ltable[a] + ltable[b]];
     }
-    return result;
 }
 
 uint8_t gdiv(uint8_t a, uint8_t b) {
-    uint8_t result;
     if(a == 0){
-        result = 0;
+        return 0;
     } else if(b == 0){
         printf("Code tried to divide %x by %x !\n", a, b);
         exit(1);
@@ -171,9 +168,8 @@ uint8_t gdiv(uint8_t a, uint8_t b) {
         /* Get the antilog */
         
         //result = atable[(255 + ltable[a] - ltable[b])%255];
-        result = atable[255 + ltable[a] - ltable[b]];
+        return atable[255 + ltable[a] - ltable[b]];
     }
-    return result;
 }
 
 uint8_t getRandom(){

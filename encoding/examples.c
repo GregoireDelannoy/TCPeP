@@ -8,14 +8,14 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define PACKET_LENGTH 1500
-#define CLEAR_PACKETS 300
+#define PACKET_LENGTH 10
+#define CLEAR_PACKETS 10
 #define LOSS 0.4
-#define CODING_WINDOW 100
+#define CODING_WINDOW 4
 #define REDUNDANCY_FACTOR 2
 
 
-//int addIfInnovative(encodedpacketpool* pool, encodedpacket packet){
+//int addIfInnovative(encodedpacketarray* pool, matrix* rrefCoeffs, matrix* invertedCoeffs, encodedpacket packet, int decodingWindow){
     //uint8_t* rrefVector;
     //uint8_t* invertedVector;
     //uint8_t* factorVector;
@@ -24,12 +24,9 @@
     //uint8_t factor;
     //int returnValue = true;
 
-    //if(pool->nPackets == 0){ // First packet HAS to be added (plus, we're doing some mallocs here)
-        //pool->nPackets = 1;
-        //pool->packets = malloc(sizeof(encodedpacket));
-        //pool->packets[0] = packet;
-        //pool->rrefCoeffs = mCreate(1, packet.nCoeffs);
-        //pool->invertedCoeffs = mCreate(1, packet.nCoeffs);
+    //if(pool->nPackets == 0){ // First packet HAS to be added
+        //rrefCoeffs = mCreate(1, decodingWindow);
+        //invertedCoeffs = mCreate(1, decodingWindow);
         
         //for(i = 0; i<packet.nCoeffs; i++){
             //pool->rrefCoeffs->data[0][i] = packet.coeffs[i];
@@ -184,7 +181,7 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
         NUM = NUM + REDUNDANCY_FACTOR;
         
         for(i=0; i < (int)NUM; i++){
-            currentNCodedPackets = min(CODING_WINDOW, clearPacketArray->nPackets);
+            currentNCodedPackets = min(CODING_WINDOW + 1, clearPacketArray->nPackets);
             // Generate a random combination of packets in the coding window
             matrix* currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
             
@@ -220,7 +217,7 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
             currentEncodedPacket->coeffs->alpha = malloc(currentNCodedPackets * sizeof(uint8_t));
             
             for(j=0; j<currentNCodedPackets; j++){
-                currentEncodedPacket->coeffs->start[j] = (uint16_t) (clearPacketArray->packets[j]->indexStart - currentIndex);
+                currentEncodedPacket->coeffs->start[j] = (uint16_t) (clearPacketArray->packets[j]->indexStart - currentIndex);                
                 currentEncodedPacket->coeffs->size[j] = clearPacketArray->packets[j]->payload->size;
                 currentEncodedPacket->coeffs->alpha[j] = currentCoefficents->data[0][j];
                 currentIndex = clearPacketArray->packets[j]->indexStart;
@@ -241,10 +238,51 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
     return ret;
 }
 
-clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderpool* buffer){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
+void addToInfosTable(clearinfos** table, int* n, encodedpacket packet){
+    uint32_t currentStart;
+    int i, j, isFound;
+    
+    currentStart = packet.coeffs->start1;
+    for(i=0; i<packet.coeffs->n; i++){ // Loop into the coeffs (= loop into clear packets)
+        isFound = false;
+        for(j=0; j<(*n) && !isFound; j++){ // Search in the table if already known
+            if(currentStart == (*table)[j].start){
+                isFound= true;
+                
+                // Test to ensure no repacketization
+                if((*table)[j].size != packet.coeffs->size[i]){
+                    printf("handleInCoded: REPACKETIZATION OCURRED ! BAD. WILL PROBABLY DIE.\n");
+                }
+            }
+        }
+        if(!isFound){ // Clear packet reference is new ; add it to the table
+            (*table) = realloc((*table), ((*n) + 1) * sizeof(clearinfos));
+            (*table)[(*n)].start = currentStart;
+            (*table)[(*n)].size = packet.coeffs->size[j];
+            (*n)++;
+        }
+        currentStart += packet.coeffs->start[i];
+    }
+}
+
+void printInfosTable(clearinfos* table, int n){
+    int i;
+    printf("Info table, containing %d entries :\n", n);
+    printf("|id : start : size|\n");
+    for(i=0; i<n; i++){
+        printf(" |%3d : %5d : %5d|\n", i, table[i].start, table[i].size);
+    }
+}
+
+clearpacketarray* handleInCoded(encodedpacket codedPacket, encodedpacketarray* buffer){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
     clearpacketarray* ret = malloc(sizeof(clearpacketarray));
     ret->nPackets = 0;
     ret->packets = 0;
+    
+    clearinfos** clearInfosTable = malloc(sizeof(clearinfos*));
+    *clearInfosTable = 0;
+    int i, nClearPackets[1] = {0};
+    
     
     if(codedPacket.coeffs == 0){ // The packet is not really coded ; must be control
         printf("Handle coded : Received a control packet\n");
@@ -253,9 +291,18 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderpool* buffer){
         currentClearPacket->type = TYPE_CONTROL;
         clearArrayAppend(ret, currentClearPacket);
     } else {
-        // Retrieve the coding vector
+        for(i=0; i<buffer->nPackets; i++){
+            // Iterate through the array of coded packets, in order to populate the table correctly : every clear packet mentionned in the coded pool should be referenced in the array.
+            addToInfosTable(clearInfosTable, nClearPackets, *(buffer->packets[i]));
+        }
+        addToInfosTable(clearInfosTable, nClearPackets, codedPacket);
+        printInfosTable(*clearInfosTable, *nClearPackets);
+        
+        
+        free(*clearInfosTable);
     }
     
+    free(clearInfosTable);
     return ret;
 }
 
@@ -266,12 +313,9 @@ int main(int argc, char **argv){
     clearpacketarray* encoderBuffer = malloc(sizeof(clearpacketarray));
     encoderBuffer->nPackets = 0;
     encoderBuffer->packets = 0;
-    decoderpool* decoderBuffer = malloc(sizeof(decoderpool));
-    decoderBuffer->rrefCoeffs = mCreate(0,0);
-    decoderBuffer->invertedCoeffs = mCreate(0,0);
-    decoderBuffer->array = malloc(sizeof(encodedpacketarray));
-    decoderBuffer->array->nPackets = 0;
-    decoderBuffer->array->packets = 0;
+    encodedpacketarray* decoderBuffer = malloc(sizeof(encodedpacketarray));
+    decoderBuffer->nPackets = 0;
+    decoderBuffer->packets = 0;
     
     // Transient allocations
     clearpacket* currentClearPacket;
@@ -327,10 +371,7 @@ int main(int argc, char **argv){
     // Clean
     mFree(Ps);
     clearArrayFree(encoderBuffer);
-    encodedArrayFree(decoderBuffer->array);
-    mFree(decoderBuffer->rrefCoeffs);
-    mFree(decoderBuffer->invertedCoeffs);
-    free(decoderBuffer);
+    encodedArrayFree(decoderBuffer);
     
     //// Gen Encoded Packets
     //encodedpacket** encodedData = malloc(ENCODED_PACKETS * (sizeof (encodedpacket*)));

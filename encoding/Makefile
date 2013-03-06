@@ -1,5 +1,7 @@
 CC = gcc
-CFLAGS = -Wall -g -pg
+CFLAGS = -Wall -g
+
+VFLAGS = --track-origins=yes --leak-check=full --show-reachable=yes
 
 OBJ = galois_field.o matrix.o  packet.o
 HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h
@@ -15,13 +17,13 @@ run:all
 	./examples
 
 runMem:all
-	valgrind --track-origins=yes --leak-check=full ./examples
+	valgrind $(VFLAGS) ./examples
 
 test:all
 	./test
 
 testMem:all
-	valgrind --leak-check=full ./test
+	valgrind $(VFLAGS) ./test
 
 clean:
 	rm examples test *.o
