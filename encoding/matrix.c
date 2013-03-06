@@ -15,7 +15,7 @@ matrix* mCreate(int rows, int columns){
     resultMatrix->nRows = rows;
     resultMatrix->nColumns = columns;
     for(i = 0; i < resultMatrix->nRows; i++){
-        resultMatrix->data[i] = malloc(resultMatrix->nColumns * sizeof(uint8_t*));
+        resultMatrix->data[i] = malloc(resultMatrix->nColumns * sizeof(uint8_t));
     }
     return resultMatrix;
 }

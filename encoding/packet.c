@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "packet.h"
 
@@ -100,6 +101,24 @@ void encodedArrayFree(encodedpacketarray* a){
     free(a->packets);
     
     free(a);
+}
+
+encodedpacket* encodedPacketCopy(encodedpacket p){
+    // Return a new encoded packet, copied from p
+    encodedpacket* ret = malloc(sizeof(encodedpacket));
+    ret->payload = payloadCreate(p.payload->size, p.payload->data);
+    ret->coeffs = malloc(sizeof(coeffs));
+    
+    ret->coeffs->n = p.coeffs->n;
+    ret->coeffs->start1 = p.coeffs->start1;
+    ret->coeffs->start = malloc(p.coeffs->n * sizeof(uint16_t));
+    memcpy(ret->coeffs->start, p.coeffs->start, p.coeffs->n * sizeof(uint16_t));
+    ret->coeffs->size = malloc(p.coeffs->n * sizeof(uint16_t));
+    memcpy(ret->coeffs->size, p.coeffs->size, p.coeffs->n * sizeof(uint16_t));
+    ret->coeffs->alpha = malloc(p.coeffs->n * sizeof(uint8_t));
+    memcpy(ret->coeffs->alpha, p.coeffs->alpha, p.coeffs->n * sizeof(uint8_t));
+    
+    return ret;
 }
 
 void encodedArrayAppend(encodedpacketarray* a, encodedpacket* p){

@@ -59,6 +59,8 @@ int matrixTest(){
     
     mFree(a);mFree(b);mFree(identity);mFree(result);
     
+    mFree(mCreate(0,0));
+    
     return isOk;
 }
 
@@ -69,7 +71,10 @@ int packetTest(){
     clearpacket* cp = clearPacketCreate(10, 2, data);
     encodedpacket* ep = malloc(sizeof(encodedpacket));
     ep->payload = payloadCreate(2, data);
-    ep->coeffs = malloc(sizeof(coeffs));    
+    ep->coeffs = malloc(sizeof(coeffs));
+    ep->coeffs->alpha = malloc(2 * sizeof(uint8_t));
+    ep->coeffs->size = malloc(2 * sizeof(uint16_t));
+    ep->coeffs->start = malloc(2 * sizeof(uint16_t));
     
     clearPacketFree(cp);
     encodedPacketFree(ep);
