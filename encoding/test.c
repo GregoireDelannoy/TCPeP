@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "structures.h"
+#include "utils.h"
 #include "galois_field.h"
 #include "matrix.h"
 #include "packet.h"

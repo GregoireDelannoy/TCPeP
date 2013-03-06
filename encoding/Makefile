@@ -2,8 +2,9 @@ CC = gcc
 CFLAGS = -Wall -g -pg
 
 OBJ = galois_field.o matrix.o  packet.o
+HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h
 
-%.o: %.c %.h
+%.o: %.c $(HDR)
 	$(CC) $(CFLAGS) -c $<
 
 all:$(OBJ) examples.o test.o

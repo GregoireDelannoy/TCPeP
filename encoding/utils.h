@@ -1,5 +1,5 @@
-#ifndef _STRUCTURES_
-#define _STRUCTURES_
+#ifndef _UTILS_
+#define _UTILS_
 #include <stdint.h>
 #include "matrix.h"
 #include "packet.h"
@@ -10,6 +10,7 @@
 #define true 1==1
 #define false 1==0
 
+
 typedef struct decoderpool_t {
     encodedpacketarray* array;
     matrix* rrefCoeffs;
@@ -17,3 +18,5 @@ typedef struct decoderpool_t {
 } decoderpool;
 
 #endif
+
+

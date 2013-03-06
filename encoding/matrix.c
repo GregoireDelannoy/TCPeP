@@ -4,9 +4,7 @@
 
 #include "galois_field.h"
 #include "matrix.h"
-
-#define true 1==1
-#define false 1==0
+#include "utils.h"
 
 
 matrix* mCreate(int rows, int columns){

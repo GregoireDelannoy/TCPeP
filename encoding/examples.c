@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h> // Needed for memcpy... don't ask why it's here !
 
-#include "structures.h"
+#include "utils.h"
 #include "galois_field.h"
 #include "matrix.h"
 #include "packet.h"
@@ -11,7 +11,7 @@
 #define PACKET_LENGTH 1500
 #define CLEAR_PACKETS 1000
 #define LOSS 0.4
-#define CODING_WINDOW 10
+#define CODING_WINDOW 100
 #define REDUNDANCY_FACTOR 2
 
 
