@@ -154,6 +154,7 @@ uint8_t gmul(uint8_t a, uint8_t b) {
         result = 0;
     } else {
         /* Get the antilog */
+        //result = atable[(ltable[a] + ltable[b])%255];
         result = atable[ltable[a] + ltable[b]];
     }
     return result;
@@ -168,10 +169,9 @@ uint8_t gdiv(uint8_t a, uint8_t b) {
         exit(1);
     } else {
         /* Get the antilog */
+        
+        //result = atable[(255 + ltable[a] - ltable[b])%255];
         result = atable[255 + ltable[a] - ltable[b]];
-        if(result == 0){
-            printf("Division returned 0 while a = %x", a);
-        }
     }
     return result;
 }

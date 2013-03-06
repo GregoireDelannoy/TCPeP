@@ -21,7 +21,7 @@ int galoisTest(){
     }
     
     // Multiplication :
-    if((gmul(a,b) != b) || (gmul(0x02, 0x02)!=0x04)){
+    if((gmul(a,b) != b) || (gmul(0x02, 0x02)!=0x04) ){
         printf("Galois multiplication failed\n");
         isOk = false;
     }

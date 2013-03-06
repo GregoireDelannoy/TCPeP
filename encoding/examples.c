@@ -9,7 +9,7 @@
 #include "packet.h"
 
 #define PACKET_LENGTH 1500
-#define CLEAR_PACKETS 1000
+#define CLEAR_PACKETS 300
 #define LOSS 0.4
 #define CODING_WINDOW 100
 #define REDUNDANCY_FACTOR 2
