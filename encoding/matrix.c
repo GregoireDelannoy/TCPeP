@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "galois_field.h"
 #include "matrix.h"
@@ -176,6 +177,19 @@ void mAppendVector(matrix* m, uint8_t* v){
     m->data = realloc(m->data, sizeof(uint8_t*) * (m->nRows + 1));
     m->data[m->nRows] = v;
     m->nRows++; 
+}
+
+// Expand a matrix width to the requested size
+void mGrow(matrix* m, int newColumnSize){
+    if(newColumnSize > m->nColumns){
+        int i;
+        for(i=0; i<m->nRows; i++){
+            m->data[i] = realloc(m->data[i], newColumnSize * sizeof(uint8_t));
+            memset(m->data[i] + m->nColumns, 0x00, newColumnSize - m->nColumns);
+        }
+        
+        m->nColumns = newColumnSize;
+    }
 }
 
 

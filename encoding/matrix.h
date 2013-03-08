@@ -35,4 +35,6 @@ void rowReduce(uint8_t* row, uint8_t factor, int size);
 
 void rowMulSub(uint8_t* a, uint8_t* b, uint8_t coeff, int size);
 
+void mGrow(matrix* m, int newColumnSize);
+
 #endif

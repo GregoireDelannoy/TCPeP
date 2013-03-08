@@ -15,6 +15,16 @@ typedef struct clearinfos_t {
     uint16_t size;
 } clearinfos;
 
+
+// Temporary ? structure
+typedef struct decoderstate_t {
+    matrix* rrefCoeffs;
+    matrix* invertedCoeffs;
+    matrix* codedData;
+    clearinfos** clearInfosTable;
+    int nClearPackets[1];
+} decoderstate;
+
 #endif
 
 
