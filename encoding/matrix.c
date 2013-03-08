@@ -11,11 +11,14 @@ matrix* mCreate(int rows, int columns){
     int i;
     matrix* resultMatrix;
     resultMatrix = malloc(sizeof(matrix));
-    resultMatrix->data = malloc(rows * sizeof(uint8_t**));
     resultMatrix->nRows = rows;
     resultMatrix->nColumns = columns;
-    for(i = 0; i < resultMatrix->nRows; i++){
-        resultMatrix->data[i] = malloc(resultMatrix->nColumns * sizeof(uint8_t));
+    // In case of a 0 matrix, do not allocate
+    if(rows != 0){
+        resultMatrix->data = malloc(rows * sizeof(uint8_t**));
+        for(i = 0; i < resultMatrix->nRows; i++){
+            resultMatrix->data[i] = malloc(resultMatrix->nColumns * sizeof(uint8_t));
+        }
     }
     return resultMatrix;
 }

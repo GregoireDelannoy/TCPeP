@@ -8,10 +8,10 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define PACKET_LENGTH 10
-#define CLEAR_PACKETS 10
+#define PACKET_LENGTH 1500
+#define CLEAR_PACKETS 1000
 #define LOSS 0.4
-#define CODING_WINDOW 4
+#define CODING_WINDOW 120
 #define REDUNDANCY_FACTOR 2
 
 void addToInfosTable(clearinfos** table, int* n, encodedpacket packet){
@@ -76,26 +76,46 @@ int addIfInnovative(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedDat
     uint8_t* rrefVector;
     uint8_t* invertedVector;
     uint8_t* factorVector;
+    uint8_t* dataVector;
     int i, currentPacketNumber = rrefCoeffs->nRows, currentTableIndex;
     int nullVector;
     uint8_t factor;
     int returnValue = true;
     uint32_t currentStart;
 
-    if(currentPacketNumber == 0){ // First packet HAS to be added        
+    if(currentPacketNumber == 0){ // First packet HAS to be added
+        rrefCoeffs->nRows = 1;
+        rrefCoeffs->nColumns = decodingWindow;
+        rrefCoeffs->data = malloc(sizeof(uint8_t*));
+        rrefCoeffs->data[0] = malloc(decodingWindow * sizeof(uint8_t));
+        memset(rrefCoeffs->data[0], 0x00, decodingWindow);
+        
+        invertedCoeffs->nRows = 1;
+        invertedCoeffs->nColumns = decodingWindow;
+        invertedCoeffs->data = malloc(sizeof(uint8_t*));
+        invertedCoeffs->data[0] = malloc(decodingWindow * sizeof(uint8_t));
+        memset(invertedCoeffs->data[0], 0x00, decodingWindow);
+        
+        codedData->nRows = 1;
+        codedData->nColumns = biggestSizeTable(infosTable, decodingWindow);
+        codedData->data = malloc(sizeof(uint8_t*));
+        codedData->data[0] = malloc(biggestSizeTable(infosTable, decodingWindow) * sizeof(uint8_t));
+        memset(codedData->data[0], 0x00, biggestSizeTable(infosTable, decodingWindow));
+        
         currentStart = packet.coeffs->start1;
         for(i = 0; i<packet.coeffs->n; i++){ // Fill the Matrix
             currentStart += packet.coeffs->start[i];
             currentTableIndex = indexInTable(infosTable, decodingWindow, currentStart);
-            printf("Current table index : %d\n", currentTableIndex);
             
             rrefCoeffs->data[0][currentTableIndex] = packet.coeffs->alpha[i];
+            memcpy(codedData->data[0], packet.payload->data, packet.payload->size);
         }
         invertedCoeffs->data[0][0] = 1; // First packet
 
         factor = rrefCoeffs->data[0][0];
         rowReduce(rrefCoeffs->data[0],factor , decodingWindow);
         rowReduce(invertedCoeffs->data[0],factor, decodingWindow);
+        rowReduce(codedData->data[0],factor, codedData->nColumns);
     } else {
         rrefVector = calloc(decodingWindow, sizeof(uint8_t));
         factorVector = calloc(decodingWindow, sizeof(uint8_t));
@@ -120,24 +140,30 @@ int addIfInnovative(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedDat
                 nullVector = false;
             }
         }
-        if(!nullVector && currentPacketNumber < decodingWindow &&(rrefVector[currentPacketNumber] != 0x00)){ // Packet is innovative. Add to the pool
+        if(!nullVector && (rrefVector[currentPacketNumber] != 0x00)){ // Packet is innovative. Add to the pool
             printf("AddIf: Packet is innovative ! Let's add it.\n");
             
             // Compute inverted vector (basically, a unity vector to which we apply the same reduction operations)
             invertedVector = calloc(decodingWindow, sizeof(uint8_t));
+            dataVector = calloc(codedData->nColumns, sizeof(uint8_t));
+            memcpy(dataVector, packet.payload->data, packet.payload->size);
+            
             invertedVector[currentPacketNumber] = 1;
             for(i=0; i<currentPacketNumber; i++){ // Eliminate
                 rowMulSub(invertedVector, invertedCoeffs->data[i], factorVector[i], decodingWindow);
+                rowMulSub(dataVector, codedData->data[i], factorVector[i], codedData->nColumns);
             }
 
             // Reduce rref to 1 (and apply to inverted as well)
             factor = rrefVector[currentPacketNumber];
             rowReduce(rrefVector, factor, decodingWindow);
             rowReduce(invertedVector, factor, decodingWindow);
+            rowReduce(dataVector, factor, codedData->nColumns);
 
             // Append to the pool of encoded packets
             mAppendVector(rrefCoeffs, rrefVector);
             mAppendVector(invertedCoeffs, invertedVector);
+            mAppendVector(codedData, dataVector);
         } else {
             printf("AddIf: Packet is not innovative. Dropped.\n");
             free(rrefVector);
@@ -149,62 +175,62 @@ int addIfInnovative(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedDat
     return returnValue;
 }
 
-//packetarray* extractPacket(encodedpacketpool pool){
-    //// For each packet, try to reduce its coeff to "0..0 1 0.. 0" ; if done, we can decode.
-    //encodedpacket currentCodedPacket = pool.packets[0];
-    //uint8_t factor, temp;
-    //int i, j, k, isReduced;
-    //clearpacket* currentClearPacket;
-    //packetarray* clearPackets = malloc(sizeof(packetarray));
-    //clearPackets->nPackets = 0;
-    //clearPackets->packets = 0;
+clearpacketarray* extractPacket(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedData,clearinfos* infosTable, int decodingWindow){
+    // For each packet, try to reduce its coeff to "0..0 1 0.. 0" ; if done, we can decode.
+    encodedpacket currentCodedPacket = pool.packets[0];
+    uint8_t factor, temp;
+    int i, j, k, isReduced;
+    clearpacket* currentClearPacket;
+    packetarray* clearPackets = malloc(sizeof(packetarray));
+    clearPackets->nPackets = 0;
+    clearPackets->packets = 0;
 
-    //for(i=0; i < pool.nPackets; i++){
-        //currentCodedPacket = pool.packets[i];
+    for(i=0; i < pool.nPackets; i++){
+        currentCodedPacket = pool.packets[i];
         
-        //for(j=0; j < pool.nPackets; j++){
-            //if(i!=j){
-                //factor = pool.rrefCoeffs->data[i][j];
-                //rowMulSub(pool.rrefCoeffs->data[i], pool.rrefCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
-                //rowMulSub(pool.invertedCoeffs->data[i], pool.invertedCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
-            //}
-        //}
+        for(j=0; j < pool.nPackets; j++){
+            if(i!=j){
+                factor = pool.rrefCoeffs->data[i][j];
+                rowMulSub(pool.rrefCoeffs->data[i], pool.rrefCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
+                rowMulSub(pool.invertedCoeffs->data[i], pool.invertedCoeffs->data[j], factor, currentCodedPacket.nCoeffs);
+            }
+        }
         
-        //// Test if we really have reduced it :
-        //isReduced = true;
-        //if(pool.rrefCoeffs->data[i][i] != 0x01){
-            //isReduced = false;
-        //}
-        //for(j=0; (j < currentCodedPacket.nCoeffs) && isReduced; j++){
-            //if(i != j){
-                //if(pool.rrefCoeffs->data[i][j] != 0x00){
-                    //isReduced = false;
-                //}
-            //}
-        //}
+        // Test if we really have reduced it :
+        isReduced = true;
+        if(pool.rrefCoeffs->data[i][i] != 0x01){
+            isReduced = false;
+        }
+        for(j=0; (j < currentCodedPacket.nCoeffs) && isReduced; j++){
+            if(i != j){
+                if(pool.rrefCoeffs->data[i][j] != 0x00){
+                    isReduced = false;
+                }
+            }
+        }
         
-        //if(isReduced){
-            //currentClearPacket = malloc(sizeof(clearpacket));
-            //currentClearPacket->payload.size = currentCodedPacket.payload.size;
-            //currentClearPacket->payload.data = malloc(currentClearPacket->payload.size * sizeof(uint8_t));
+        if(isReduced){
+            currentClearPacket = malloc(sizeof(clearpacket));
+            currentClearPacket->payload.size = currentCodedPacket.payload.size;
+            currentClearPacket->payload.data = malloc(currentClearPacket->payload.size * sizeof(uint8_t));
             
-            //for(j=0; j < currentClearPacket->payload.size; j++){
-                //temp = 0x00;
-                //for(k=0; k < pool.nPackets; k++){
-                    //temp = gadd(temp, gmul(pool.packets[k].payload.data[j], pool.invertedCoeffs->data[i][k]));
-                //}
-                //currentClearPacket->payload.data[j] = temp;
-            //}
+            for(j=0; j < currentClearPacket->payload.size; j++){
+                temp = 0x00;
+                for(k=0; k < pool.nPackets; k++){
+                    temp = gadd(temp, gmul(pool.packets[k].payload.data[j], pool.invertedCoeffs->data[i][k]));
+                }
+                currentClearPacket->payload.data[j] = temp;
+            }
             
-            //// Add it to the array of decoded packets
-            //clearPackets->packets = realloc(clearPackets->packets, (clearPackets->nPackets + 1) * sizeof(clearpacket));
-            //clearPackets->packets[clearPackets->nPackets] = (void*)currentClearPacket;
-            //clearPackets->nPackets++;
-        //}
-    //}
+            // Add it to the array of decoded packets
+            clearPackets->packets = realloc(clearPackets->packets, (clearPackets->nPackets + 1) * sizeof(clearpacket));
+            clearPackets->packets[clearPackets->nPackets] = (void*)currentClearPacket;
+            clearPackets->nPackets++;
+        }
+    }
     
-    //return clearPackets;
-//}
+    return clearPackets;
+}
 
 encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* clearPacketArray){ // Handle a new incoming clear packet and return array of coded packets to send
     //~~
@@ -323,12 +349,9 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, encodedpacketarray* b
         addToInfosTable(clearInfosTable, nClearPackets, codedPacket);
         
         // Initialize matrices, all cells = 0
-        matrix* rrefCoeffs = mCreate(1, *nClearPackets);
-        memset(rrefCoeffs->data[0], 0x00, *nClearPackets);
-        matrix* invertedCoeffs = mCreate(1, *nClearPackets);
-        memset(invertedCoeffs->data[0], 0x00, *nClearPackets);
-        matrix* codedData = mCreate(1, biggestSizeTable(*clearInfosTable, *nClearPackets));
-        memset(codedData->data[0], 0x00, biggestSizeTable(*clearInfosTable, *nClearPackets));
+        matrix* rrefCoeffs = mCreate(0,0);
+        matrix* invertedCoeffs = mCreate(0,0);
+        matrix* codedData = mCreate(0,0);
         
         // Perform the actual decoding : run on the buffer first
         for(i=0; i<buffer->nPackets; i++){
