@@ -3,8 +3,8 @@ CFLAGS = -Wall -g
 
 VFLAGS = --track-origins=yes --leak-check=full --show-reachable=yes
 
-OBJ = galois_field.o matrix.o  packet.o tun.o coding.o utils.o
-HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h tun.h coding.h
+OBJ = galois_field.o matrix.o  packet.o tun.o coding.o utils.o protocol.o
+HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h tun.h coding.h protocol.h
 
 %.o: %.c $(HDR)
 	$(CC) $(CFLAGS) -c $<

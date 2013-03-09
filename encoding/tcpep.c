@@ -19,6 +19,7 @@
 
 #include "tun.h"
 #include "utils.h"
+#include "protocol.h"
 
 /* buffer for reading from tun/tap interface, must be >= 1500 */
 #define BUFSIZE 2000     
@@ -248,6 +249,12 @@ int main(int argc, char *argv[]) {
 
             tap2net++;
             do_debug("TAP2NET %lu: Read %d bytes from the tun interface :\n", tap2net, nread);
+            
+            if(isTCP(buffer, nread)){
+                printf("Received packet is TCP\n");
+                muxinfos i = extractMuxInfos(buffer, nread);
+                printf("sport = %d, dport = %d, remote = %d\n", i.sport, i.dport, i.remote_ip);
+            }
 
             nwrite = udpSend(sock_fd, buffer, nread, (struct sockaddr*)&remote);
             
