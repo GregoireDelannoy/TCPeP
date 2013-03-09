@@ -1,25 +1,3 @@
-/**************************************************************************
- * simpletun.c                                                                                                                        *
- *                                                                                                                                                *
- * A simplistic, simple-minded, naive tunnelling program using tun/tap        *
- * interfaces and TCP. DO NOT USE THIS PROGRAM FOR SERIOUS PURPOSES.            *
- *                                                                                                                                                *
- * You have been warned.                                                                                                    *
- *                                                                                                                                                *
- * (C) 2010 Davide Brini.                                                                                                 *
- *                                                                                                                                                *
- * DISCLAIMER AND WARNING: this is all work in progress. The code is            *
- * ugly, the algorithms are naive, error checking and input validation        *
- * are very basic, and of course there can be bugs. If that's not enough, *
- * the program has not been thoroughly tested, so it might even fail at     *
- * the few simple things it should be supposed to do right.                             *
- * Needless to say, I take no responsibility whatsoever for what the            *
- * program might do. The program has been written mostly for learning         *
- * purposes, and can be used in the hope that is useful, but everything     *
- * is to be taken "as is" and without any kind of warranty, implicit or     *
- * explicit. See the file LICENSE for further details.                                        *
- *************************************************************************/ 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,12 +18,14 @@
 #include <netdb.h> 
 
 #include "tun.h"
+#include "utils.h"
 
 /* buffer for reading from tun/tap interface, must be >= 1500 */
 #define BUFSIZE 2000     
 #define CLIENT 0
 #define SERVER 1
 #define PORT 55555
+#define MTU 1400
 
 int debug;
 char *progname;
@@ -90,31 +70,6 @@ int cwrite(int fd, char *buf, int n){
         exit(1);
     }
     return nwrite;
-}
-
-/**************************************************************************
- * do_debug: prints debugging stuff (doh!)                                                                *
- **************************************************************************/
-void do_debug(char *msg, ...){
-    
-    va_list argp;
-    
-    if(debug) {
-    va_start(argp, msg);
-    vfprintf(stderr, msg, argp);
-    va_end(argp);
-    }
-}
-
-/**************************************************************************
- * my_err: prints custom error messages on stderr.                                                *
- **************************************************************************/
-void my_err(char *msg, ...) {
-    va_list argp;
-    
-    va_start(argp, msg);
-    vfprintf(stderr, msg, argp);
-    va_end(argp);
 }
 
 /**************************************************************************
@@ -196,7 +151,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* initialize tun interface */
-    if ( (tun_fd = tun_alloc(if_name, IFF_TUN | IFF_NO_PI)) < 0 ) {
+    if ( (tun_fd = tun_alloc(if_name, IFF_TUN | IFF_NO_PI, MTU)) < 0 ) {
         my_err("Error connecting to tun interface %s!\n", if_name);
         exit(1);
     }

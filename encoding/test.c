@@ -6,7 +6,7 @@
 #include "galois_field.h"
 #include "matrix.h"
 #include "packet.h"
-
+#include "coding.h"
 
 
 int galoisTest(){
@@ -91,9 +91,72 @@ int maxMinTest(){
     }
 }
 
+int codingTest(){
+    int i,j,k;
+    
+    // Transient variables
+    clearpacket* currentClearPacket;
+    encodedpacketarray* encoderReturn;
+    clearpacketarray* decoderReturn;
+    
+    encoderstate* encoderState = encoderStateInit();
+    decoderstate* decoderState = decoderStateInit();
+        
+    // Generate clear packets
+    matrix* Ps = getRandomMatrix(CLEAR_PACKETS, PACKET_LENGTH);
+    printf("Original Packets : \n");
+    mPrint(*Ps);
+    
+    // Pass packets to the clear handler and pipe the output to the coded handler
+    for(i=0; i<CLEAR_PACKETS; i++){
+        printf("\n~~ Round start : generating clear packet #%d.\n", i);
+        
+        if(i != 0){
+            // Form a correct clear packet :
+            currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, Ps->data[i]);
+            //currentClearPacket = clearPacketCreate((uint16_t)random(), (uint16_t)random(), Ps->data[i]);
+            currentClearPacket->type = TYPE_DATA;
+        } else {
+            // Form a CONTROL packet :
+            currentClearPacket = clearPacketCreate(0, 10, Ps->data[0]);
+            currentClearPacket->type = TYPE_CONTROL;
+        }
+        
+        // Handle it
+        encoderReturn = handleInClear(*currentClearPacket, *encoderState);
+        printf("%d encoded packets generated during this round.\n", encoderReturn->nPackets);
+        
+        // Pipe the generated packets to the coded handler, with loss
+        for(j = 0; j < encoderReturn->nPackets;j++){
+            if(((1.0 * random())/RAND_MAX) < LOSS){
+                printf("\nEncoded packet #%d has been lost\n", j);
+            } else {
+                printf("\nReceived encoded packet #%d\n", j);
+                decoderReturn = handleInCoded(*(encoderReturn->packets[j]), *decoderState);
+                printf("%d clear packet recovered during this round.\n", decoderReturn->nPackets);
+                for(k = 0; k < decoderReturn->nPackets;k++){ // For each clear packets returned
+                    // Send packets to the TCP application
+                    printf("Sending packet to the application...\n");
+                    clearPacketPrint(*(decoderReturn->packets[k]));
+                }
+                clearArrayFree(decoderReturn);
+            }
+        }
+        
+        encodedArrayFree(encoderReturn);
+        clearPacketFree(currentClearPacket);
+    }
+    
+    // Clean
+    mFree(Ps);
+    decoderStateFree(decoderState);
+    encoderStateFree(encoderState);
+    
+    return true;
+}
 
 int main(int argc, char **argv){    
-    if(galoisTest() && matrixTest() && packetTest() && maxMinTest()){
+    if(galoisTest() && matrixTest() && packetTest() && maxMinTest() && codingTest()){
         printf("All test passed.\n");
         return 0;
     } else {

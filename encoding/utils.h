@@ -1,5 +1,16 @@
 #ifndef _UTILS_
 #define _UTILS_
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <stdarg.h>
+
+
 #include <stdint.h>
 #include "matrix.h"
 #include "packet.h"
@@ -9,21 +20,11 @@
 
 #define true 1==1
 #define false 1==0
+#define DEBUG true
 
-typedef struct clearinfos_t {
-    uint32_t start;
-    uint16_t size;
-} clearinfos;
+void do_debug(char *msg, ...);
 
-
-// Temporary ? structure
-typedef struct decoderstate_t {
-    matrix* rrefCoeffs;
-    matrix* invertedCoeffs;
-    matrix* codedData;
-    clearinfos** clearInfosTable;
-    int nClearPackets[1];
-} decoderstate;
+void my_err(char *msg, ...);
 
 #endif
 

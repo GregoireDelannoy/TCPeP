@@ -1,18 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h> // Needed for memcpy... don't ask why it's here !
-
-#include "utils.h"
-#include "galois_field.h"
-#include "matrix.h"
-#include "packet.h"
-
-#define PACKET_LENGTH 10
-#define CLEAR_PACKETS 10
-#define LOSS 0.1
-#define CODING_WINDOW 5
-#define REDUNDANCY_FACTOR 1.2
+#include "coding.h"
 
 void addToInfosTable(clearinfos** table, int* n, encodedpacket packet){
     uint32_t currentStart;
@@ -221,10 +207,7 @@ void extractClear(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedData,
     }
 }
 
-encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* clearPacketArray){ // Handle a new incoming clear packet and return array of coded packets to send
-    //~~
-    static float NUM = 0; // WARNING ! Be cautious with that variable !
-    //~~
+encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ // Handle a new incoming clear packet and return array of coded packets to send
     int i, j, isFound, currentNCodedPackets, currentBiggestPacket, currentIndex;
     encodedpacketarray* ret = malloc(sizeof(encodedpacketarray));
     ret->nPackets = 0;
@@ -240,28 +223,28 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
     } else if(clearPacket.type == TYPE_DATA) {
         // If the packet is not already in the coding buffer, add it. Suppose no repacketization for the moment
         isFound = false;
-        for(i=0; i < clearPacketArray->nPackets && !isFound; i++){
-            if(clearPacketArray->packets[i]->indexStart == clearPacket.indexStart){
+        for(i=0; i < state.buffer->nPackets && !isFound; i++){
+            if(state.buffer->packets[i]->indexStart == clearPacket.indexStart){
                 isFound = true;
             }
         }
         if(!isFound){
             //printf("Handle Clear : Adding clear packet #%d to the buffer.\n", clearPacket.indexStart);
-            clearArrayAppend(clearPacketArray, clearPacketCreate(clearPacket.indexStart, clearPacket.payload->size, clearPacket.payload->data));
+            clearArrayAppend(state.buffer, clearPacketCreate(clearPacket.indexStart, clearPacket.payload->size, clearPacket.payload->data));
         }
         
         
-        NUM = NUM + REDUNDANCY_FACTOR;
+        state.NUM = state.NUM + REDUNDANCY_FACTOR;
         
-        for(i=0; i < (int)NUM; i++){
-            currentNCodedPackets = min(CODING_WINDOW + 1, clearPacketArray->nPackets);
+        for(i=0; i < (int)state.NUM; i++){
+            currentNCodedPackets = min(CODING_WINDOW + 1, state.buffer->nPackets);
             // Generate a random combination of packets in the coding window
             matrix* currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
             
             // Find the biggest packet in the buffer
             currentBiggestPacket = 0;
             for(j=0; j<currentNCodedPackets; j++){
-                currentBiggestPacket = max(currentBiggestPacket, clearPacketArray->packets[j]->payload->size);
+                currentBiggestPacket = max(currentBiggestPacket, state.buffer->packets[j]->payload->size);
             }
             
             // Compute the encoded payload, using matrices            
@@ -269,9 +252,9 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
             
             // Fill the Matrix with data from packets
             for(j=0; j<currentNCodedPackets; j++){
-                memcpy(payloads->data[j], clearPacketArray->packets[j]->payload->data, clearPacketArray->packets[j]->payload->size);
+                memcpy(payloads->data[j], state.buffer->packets[j]->payload->data, state.buffer->packets[j]->payload->size);
                 // Padd it with zeroes
-                memset(payloads->data[j] + clearPacketArray->packets[j]->payload->size, 0x00, currentBiggestPacket - clearPacketArray->packets[j]->payload->size);
+                memset(payloads->data[j] + state.buffer->packets[j]->payload->size, 0x00, currentBiggestPacket - state.buffer->packets[j]->payload->size);
             }
             
             // Compute the encoded payload
@@ -283,17 +266,17 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
             // Add headers
             currentEncodedPacket->coeffs = malloc(sizeof(coeffs));
             currentEncodedPacket->coeffs->n = currentNCodedPackets;
-            currentEncodedPacket->coeffs->start1 = clearPacketArray->packets[0]->indexStart;
-            currentIndex = clearPacketArray->packets[0]->indexStart;
+            currentEncodedPacket->coeffs->start1 = state.buffer->packets[0]->indexStart;
+            currentIndex = state.buffer->packets[0]->indexStart;
             currentEncodedPacket->coeffs->start = malloc(currentNCodedPackets * sizeof(uint16_t));
             currentEncodedPacket->coeffs->size = malloc(currentNCodedPackets * sizeof(uint16_t));
             currentEncodedPacket->coeffs->alpha = malloc(currentNCodedPackets * sizeof(uint8_t));
             
             for(j=0; j<currentNCodedPackets; j++){
-                currentEncodedPacket->coeffs->start[j] = (uint16_t) (clearPacketArray->packets[j]->indexStart - currentIndex);                
-                currentEncodedPacket->coeffs->size[j] = clearPacketArray->packets[j]->payload->size;
+                currentEncodedPacket->coeffs->start[j] = (uint16_t) (state.buffer->packets[j]->indexStart - currentIndex);                
+                currentEncodedPacket->coeffs->size[j] = state.buffer->packets[j]->payload->size;
                 currentEncodedPacket->coeffs->alpha[j] = currentCoefficents->data[0][j];
-                currentIndex = clearPacketArray->packets[j]->indexStart;
+                currentIndex = state.buffer->packets[j]->indexStart;
             }
             
             // Add the packet to the return array
@@ -305,15 +288,13 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, clearpacketarray* cle
         }
         
         // Keep only the fractional part
-        NUM = NUM - (int)NUM;
+        state.NUM = state.NUM - (int)state.NUM;
     }
     
     return ret;
 }
 
-
-
-clearpacketarray* handleInCoded(encodedpacket codedPacket, encodedpacketarray* buffer, decoderstate state){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
+clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state){ // Handle a new incoming encoded packet and return the array of (eventually !) decoded clear packets
     clearpacketarray* ret = malloc(sizeof(clearpacketarray));
     ret->nPackets = 0;
     ret->packets = 0;
@@ -325,24 +306,14 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, encodedpacketarray* b
         currentClearPacket->type = TYPE_CONTROL;
         clearArrayAppend(ret, currentClearPacket);
     } else {
-        // Iterate through the array of coded packets, in order to populate the table correctly : every clear packet mentionned in the coded pool should be referenced in the array.
-        //for(i=0; i<buffer->nPackets; i++){
-            //addToInfosTable(state.clearInfosTable, nClearPackets, *(buffer->packets[i]));
-        //}
         // Add the currently received packet in the table
         addToInfosTable(state.clearInfosTable, state.nClearPackets, codedPacket);
         
-        // Perform the actual decoding : run on the buffer first
-        //for(i=0; i<buffer->nPackets; i++){
-            //if(addIfInnovative(state.rrefCoeffs, state.invertedCoeffs, state.codedData, codedPacket, *clearInfosTable, *nClearPackets)){
-                //extractClear(state.rrefCoeffs, state.invertedCoeffs, state.codedData, *clearInfosTable, *nClearPackets, ret);
-            //}
-        //}
         if(addIfInnovative(state.rrefCoeffs, state.invertedCoeffs, state.codedData, codedPacket, *(state.clearInfosTable), *(state.nClearPackets))){ // Then on the newly received packet
             printf("Packet was innovative.\n");
             extractClear(state.rrefCoeffs, state.invertedCoeffs, state.codedData, *(state.clearInfosTable), *(state.nClearPackets), ret);
             // Because it was innovative, append the packet to the buffer
-            encodedArrayAppend(buffer, encodedPacketCopy(codedPacket));
+            encodedArrayAppend(state.buffer, encodedPacketCopy(codedPacket));
         }
         
         printf("Matrices states after adding all known packets.\nrref :\n");
@@ -357,88 +328,46 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, encodedpacketarray* b
     return ret;
 }
 
-
-int main(int argc, char **argv){
-    int i,j,k;
-    // Persistent allocations
-    clearpacketarray* encoderBuffer = malloc(sizeof(clearpacketarray));
-    encoderBuffer->nPackets = 0;
-    encoderBuffer->packets = 0;
-    encodedpacketarray* decoderBuffer = malloc(sizeof(encodedpacketarray));
-    decoderBuffer->nPackets = 0;
-    decoderBuffer->packets = 0;
+decoderstate* decoderStateInit(){
+    decoderstate* ret = malloc(sizeof(decoderstate));
     
-    decoderstate decoderState;
+    ret->buffer = malloc(sizeof(encodedpacketarray));
+    ret->buffer->nPackets = 0;
+    ret->buffer->packets = 0;
+    
     // Initialize matrices
-    decoderState.rrefCoeffs = mCreate(0,0);
-    decoderState.invertedCoeffs = mCreate(0,0);
-    decoderState.codedData = mCreate(0,0);
-    decoderState.clearInfosTable = malloc(sizeof(clearinfos*));
-    *(decoderState.clearInfosTable) = 0;
-    decoderState.nClearPackets[0] = 0;
+    ret->rrefCoeffs = mCreate(0,0);
+    ret->invertedCoeffs = mCreate(0,0);
+    ret->codedData = mCreate(0,0);
+    ret->clearInfosTable = malloc(sizeof(clearinfos*));
+    *(ret->clearInfosTable) = 0;
+    ret->nClearPackets[0] = 0;
     
-    // Transient allocations
-    clearpacket* currentClearPacket;
-    encodedpacketarray* encoderReturn;
-    clearpacketarray* decoderReturn;
-    
-        
-    // Generate clear packets
-    matrix* Ps = getRandomMatrix(CLEAR_PACKETS, PACKET_LENGTH);
-    printf("Original Packets : \n");
-    mPrint(*Ps);
-    
-    // Pass packets to the clear handler and pipe the output to the coded handler
-    for(i=0; i<CLEAR_PACKETS; i++){
-        printf("\n~~ Round start : generating clear packet #%d.\n", i);
-        
-        if(i != 0){
-            // Form a correct clear packet :
-            currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, Ps->data[i]);
-            //currentClearPacket = clearPacketCreate((uint16_t)random(), (uint16_t)random(), Ps->data[i]);
-            currentClearPacket->type = TYPE_DATA;
-        } else {
-            // Form a CONTROL packet :
-            currentClearPacket = clearPacketCreate(0, 10, Ps->data[0]);
-            currentClearPacket->type = TYPE_CONTROL;
-        }
-        
-        // Handle it
-        encoderReturn = handleInClear(*currentClearPacket, encoderBuffer);
-        printf("%d encoded packets generated during this round.\n", encoderReturn->nPackets);
-        
-        // Pipe the generated packets to the coded handler, with loss
-        for(j = 0; j < encoderReturn->nPackets;j++){
-            if(((1.0 * random())/RAND_MAX) < LOSS){
-                printf("\nEncoded packet #%d has been lost\n", j);
-            } else {
-                printf("\nReceived encoded packet #%d\n", j);
-                decoderReturn = handleInCoded(*(encoderReturn->packets[j]), decoderBuffer, decoderState);
-                printf("%d clear packet recovered during this round.\n", decoderReturn->nPackets);
-                for(k = 0; k < decoderReturn->nPackets;k++){ // For each clear packets returned
-                    // Send packets to the TCP application
-                    printf("Sending packet to the application...\n");
-                    clearPacketPrint(*(decoderReturn->packets[k]));
-                }
-                clearArrayFree(decoderReturn);
-            }
-        }
-        
-        encodedArrayFree(encoderReturn);
-        clearPacketFree(currentClearPacket);
-    }
-    
-    // Clean
-    mFree(Ps);
-    clearArrayFree(encoderBuffer);
-    encodedArrayFree(decoderBuffer);
-    mFree(decoderState.rrefCoeffs);
-    mFree(decoderState.invertedCoeffs);
-    mFree(decoderState.codedData);
-    
-    free(*(decoderState.clearInfosTable));
-    free(decoderState.clearInfosTable);
-    
-    return 0;
+    return ret;
 }
 
+void decoderStateFree(decoderstate* state){
+    encodedArrayFree(state->buffer);
+    mFree(state->rrefCoeffs);
+    mFree(state->invertedCoeffs);
+    mFree(state->codedData);
+    
+    free(*(state->clearInfosTable));
+    free(state->clearInfosTable);
+    free(state);
+}
+
+encoderstate* encoderStateInit(){
+    encoderstate* ret = malloc(sizeof(encoderstate));
+    ret->NUM = 0;
+    ret->buffer = malloc(sizeof(clearpacketarray));
+    ret->buffer->nPackets = 0;
+    ret->buffer->packets = 0;
+    
+    return ret;
+}
+
+void encoderStateFree(encoderstate* state){
+    clearArrayFree(state->buffer);
+    free(state);
+}

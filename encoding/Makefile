@@ -3,21 +3,21 @@ CFLAGS = -Wall -g
 
 VFLAGS = --track-origins=yes --leak-check=full --show-reachable=yes
 
-OBJ = galois_field.o matrix.o  packet.o
-HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h
+OBJ = galois_field.o matrix.o  packet.o tun.o coding.o utils.o
+HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h tun.h coding.h
 
 %.o: %.c $(HDR)
 	$(CC) $(CFLAGS) -c $<
 
-all:$(OBJ) examples.o test.o
-	gcc $(CFLAGS) $(OBJ) examples.o -o examples
+all:$(OBJ) tcpep.o test.o
+	gcc $(CFLAGS) $(OBJ) tcpep.o -o tcpep
 	gcc $(CFLAGS) $(OBJ) test.o -o test
 
 run:all
-	./examples
+	./tcpep
 
 runMem:all
-	valgrind $(VFLAGS) ./examples
+	valgrind $(VFLAGS) ./tcpep
 
 test:all
 	./test
@@ -26,4 +26,4 @@ testMem:all
 	valgrind $(VFLAGS) ./test
 
 clean:
-	rm examples test *.o
+	rm tcpep test *.o

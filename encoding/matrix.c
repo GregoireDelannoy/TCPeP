@@ -70,12 +70,13 @@ void mPrint(matrix m){
 }
 
 void mFree(matrix* m){
-int i;
-
+    int i;
     for(i = 0; i < m->nRows; i++){
         free(m->data[i]);
     }
-    free(m->data);
+    if(m->nRows > 0){
+        free(m->data);
+    }
     free(m);
 }
 
