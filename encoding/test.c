@@ -8,6 +8,10 @@
 #include "packet.h"
 #include "coding.h"
 
+#define PACKET_LENGTH 10
+#define CLEAR_PACKETS 10
+#define LOSS 0.1
+
 
 int galoisTest(){
     uint8_t a,b,c;

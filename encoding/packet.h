@@ -11,7 +11,7 @@ typedef struct payload_t {
 } payload;
 
 typedef struct coeffs_t {
-    int n;
+    uint8_t n;
     uint32_t start1; // Start sequence number
     uint8_t* alpha;  // Coefficient for the n-th segment
     uint16_t* start; // Starting sequence number for the 1+ packets ; relative to previous packet

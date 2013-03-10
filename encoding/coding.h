@@ -11,11 +11,8 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define PACKET_LENGTH 10
-#define CLEAR_PACKETS 10
-#define LOSS 0.1
-#define CODING_WINDOW 5
-#define REDUNDANCY_FACTOR 1.2
+#define CODING_WINDOW 9
+#define REDUNDANCY_FACTOR 1.25
 
 typedef struct clearinfos_t {
     uint32_t start;

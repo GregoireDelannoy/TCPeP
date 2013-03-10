@@ -90,17 +90,27 @@ void usage(void) {
 }
 
 int main(int argc, char *argv[]) {
-    int tun_fd, option;
+    int tun_fd, option, i;
     char if_name[IFNAMSIZ] = "tun0";
     int maxfd;
     uint16_t nread, nwrite;
-    char buffer[BUFSIZE];
+    char buffer[BUFSIZE], tmp[BUFSIZE];
     struct sockaddr_in local, remote;
     char remote_ip[16] = "";     /* dotted quad IP string */
     unsigned short int port = PORT;
     int sock_fd, optval = 1;
     int cliserv = -1;        /* must be specified on cmd line */
     unsigned long int tap2net = 0, net2tap = 0;
+    uint16_t sport;
+    uint16_t dport;
+    uint32_t dip;
+    clearpacketarray* clearPacketArray;
+    encodedpacketarray* encodedPacketArray;
+    
+    char nullMux[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    
+    muxstate* muxTable = 0;
+    int tableLength = 0;
 
     progname = argv[0];
     
@@ -251,14 +261,35 @@ int main(int argc, char *argv[]) {
             do_debug("TAP2NET %lu: Read %d bytes from the tun interface :\n", tap2net, nread);
             
             if(isTCP(buffer, nread)){
-                printf("Received packet is TCP\n");
-                muxinfos i = extractMuxInfos(buffer, nread);
-                printf("sport = %d, dport = %d, remote = %d\n", i.sport, i.dport, i.remote_ip);
+                do_debug("Received packet is TCP\n");
+                extractMuxInfosFromIP(buffer, nread, &sport, &dport, &dip);
+                do_debug("sport = %d, dport = %d, remote = %d\n", sport, dport, dip);
+                sport = htons(sport);
+                dport = htons(dport);
+                dip = htonl(dip);
+                
+                int nMux = assignMux(sport, dport, dip, &muxTable, &tableLength);
+                do_debug("Assigned to mux #%d\n", nMux);
+                
+                encodedPacketArray = handleInClear(bufferToClearPacket(buffer, nread), *(muxTable[nMux].encoderState));
+                printf("%d coded packets has been generated.\n", encodedPacketArray->nPackets);
+                for(i=0; i<encodedPacketArray->nPackets; i++){
+                    encodedPacketPrint((*encodedPacketArray->packets[i]));
+                    encodedPacketToBuffer((*encodedPacketArray->packets[i]), buffer, (int*)&nread);
+                    memcpy(tmp, &dip, 4);
+                    memcpy(tmp + 4, &sport, 2);
+                    memcpy(tmp + 6, &dport, 2);
+                    memcpy(tmp + 8, buffer, nread);
+                    nwrite = udpSend(sock_fd, tmp, nread + 8, (struct sockaddr*)&remote);
+                    do_debug("NET2TAP %lu: Written %d bytes to the tun interface out of a %d bytes coded packet #%d\n", net2tap, nwrite, nread, i);
+                }
+                encodedArrayFree(encodedPacketArray);
+            } else {
+                memset(tmp, 0x00, 8);
+                memcpy(tmp + 8, buffer, nread);
+                nwrite = udpSend(sock_fd, tmp, nread + 8, (struct sockaddr*)&remote);
+                do_debug("TAP2NET %lu: Written %d bytes to the network\n", tap2net, nwrite);
             }
-
-            nwrite = udpSend(sock_fd, buffer, nread, (struct sockaddr*)&remote);
-            
-            do_debug("TAP2NET %lu: Written %d bytes to the network\n", tap2net, nwrite);
         }
 
         if(FD_ISSET(sock_fd, &rd_set)) {
@@ -268,9 +299,29 @@ int main(int argc, char *argv[]) {
             nread = cread(sock_fd, buffer, BUFSIZE);
             do_debug("NET2TAP %lu: Read %d bytes from the network\n", net2tap, nread);
 
-            /* now buffer[] contains a full packet or frame, write it into the tun/tap interface */ 
-            nwrite = cwrite(tun_fd, buffer, nread);
-            do_debug("NET2TAP %lu: Written %d bytes to the tap interface\n", net2tap, nwrite);
+            // If the data is muxed :
+            if(memcmp(nullMux, buffer, 8) != 0){
+                // It is muxed
+                do_debug("Received packet is Muxed\n");
+                extractMuxInfosFromMuxed(buffer, &sport, &dport, &dip);
+                do_debug("sport = %d, dport = %d, remote = %d\n", sport, dport, dip);
+                int nMux = assignMux(sport, dport, dip, &muxTable, &tableLength);
+                do_debug("Assigned to mux #%d\n", nMux);
+                
+                encodedPacketPrint(bufferToEncodedPacket(buffer + 8, nread - 8));
+                
+                clearPacketArray = handleInCoded(bufferToEncodedPacket(buffer + 8, nread - 8), *(muxTable[nMux].decoderState));
+                printf("%d packets has been decoded.\n", clearPacketArray->nPackets);
+                for(i=0; i<clearPacketArray->nPackets; i++){
+                    clearPacketToBuffer(*(clearPacketArray->packets[i]), buffer, (int*)&nread);
+                    nwrite = cwrite(tun_fd, buffer, nread);
+                    do_debug("NET2TAP %lu: Written %d bytes to the tun interface out of a %d bytes clear packet #%d\n", net2tap, nwrite, nread, i);
+                }
+                clearArrayFree(clearPacketArray);
+            } else { // Just send it
+                nwrite = cwrite(tun_fd, buffer + 8, nread - 8);
+                do_debug("NET2TAP %lu: Written %d bytes to the tun interface\n", net2tap, nwrite);
+            }
         }
     }
     
