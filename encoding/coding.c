@@ -32,7 +32,7 @@ void printInfosTable(clearinfos* table, int n){
     printf("Info table, containing %d entries :\n", n);
     printf("|id : start : size|\n");
     for(i=0; i<n; i++){
-        printf(" |%3d : %5d : %5d|\n", i, table[i].start, table[i].size);
+        printf(" |%3d : %5u : %5u|\n", i, table[i].start, table[i].size);
     }
 }
 
@@ -213,6 +213,11 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
     ret->nPackets = 0;
     ret->packets = 0;
     
+    // DEBUG :
+    if(state.lastByteSent >= clearPacket.indexStart){
+        printf("HiC : already sent >= to current indexStart. To prevent repacketization, no coded packet will be generated\n");
+    }
+    
     //If the packet is a control packet, pass it along
     if(clearPacket.type == TYPE_CONTROL){
         printf("Received a control packet\n");
@@ -220,7 +225,7 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
         currentEncodedPacket->payload = payloadCreate(clearPacket.payload->size, clearPacket.payload->data);
         currentEncodedPacket->coeffs = 0;
         encodedArrayAppend(ret, currentEncodedPacket);
-    } else if(clearPacket.type == TYPE_DATA) {
+    } else if(clearPacket.type == TYPE_DATA && state.lastByteSent < clearPacket.indexStart) {
         // If the packet is not already in the coding buffer, add it. Suppose no repacketization for the moment
         isFound = false;
         for(i=0; i < state.buffer->nPackets && !isFound; i++){
@@ -316,14 +321,14 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state){ 
             encodedArrayAppend(state.buffer, encodedPacketCopy(codedPacket));
         }
         
-        printf("Matrices states after adding all known packets.\nrref :\n");
-        mPrint(*state.rrefCoeffs);
-        printf("inv :\n");
-        mPrint(*state.invertedCoeffs);
-        printf("InfosTable : \n");
-        printInfosTable(*(state.clearInfosTable), *(state.nClearPackets));
-        printf("codedData :\n");
-        mPrint(*state.codedData);
+        //printf("Matrices states after adding all known packets.\nrref :\n");
+        //mPrint(*state.rrefCoeffs);
+        //printf("inv :\n");
+        //mPrint(*state.invertedCoeffs);
+        //printf("InfosTable : \n");
+        //printInfosTable(*(state.clearInfosTable), *(state.nClearPackets));
+        //printf("codedData :\n");
+        //mPrint(*state.codedData);
     }
     return ret;
 }
@@ -363,6 +368,7 @@ encoderstate* encoderStateInit(){
     ret->buffer = malloc(sizeof(clearpacketarray));
     ret->buffer->nPackets = 0;
     ret->buffer->packets = 0;
+    ret->lastByteSent = 0;
     
     return ret;
 }

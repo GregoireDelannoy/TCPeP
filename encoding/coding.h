@@ -11,7 +11,7 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define CODING_WINDOW 9
+#define CODING_WINDOW 100
 #define REDUNDANCY_FACTOR 1.25
 
 typedef struct clearinfos_t {
@@ -32,6 +32,7 @@ typedef struct decoderstate_t {
 typedef struct encoderstate_t {
     float NUM;
     clearpacketarray* buffer;
+    uint32_t lastByteSent;
 } encoderstate;
 
 clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state);

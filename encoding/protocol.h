@@ -16,10 +16,15 @@ typedef struct muxstate_t {
 } muxstate;
 
 int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** statesTable, int* tableLength);
-encodedpacket bufferToEncodedPacket(char* buffer, int size);
-clearpacket bufferToClearPacket(char* buffer, int size);
+encodedpacket* bufferToEncodedPacket(char* buffer, int size);
+clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen);
 void encodedPacketToBuffer(encodedpacket p, char* buffer, int* size);
 void clearPacketToBuffer(clearpacket p, char* buffer, int* size);
+
+int ipHeaderLength(char* buffer);
+
+int isData(char* buffer, int size);
+
 
 /* On packets received via the TUN interface*/
 int isTCP(char* buffer, int size);

@@ -23,16 +23,17 @@ void encodedPacketPrint(encodedpacket packet){
     int i;
     // Print coefficients
     printf("Coeffs : ");
-    printf("Base start (start1): %d | ", packet.coeffs->start1);
-    printf("Size1 : %d | ", packet.coeffs->size[0]);
-    printf("alpha1 : %2x | ", packet.coeffs->alpha[0]);
+    printf("Base start: %u\n", packet.coeffs->start1);
+    uint32_t currentStart = packet.coeffs->start1;
     
-    for(i = 1; i < packet.coeffs->n ; i++){
-        printf("Base start (start%d): %d | ",i, packet.coeffs->start[i]);
-        printf("Size%d : %d | ",i, packet.coeffs->size[i]);
+    for(i = 0; i < packet.coeffs->n ; i++){
+        currentStart += packet.coeffs->start[i];
+        printf("start%d: %u | ",i, packet.coeffs->start[i]);
+        printf("realStart%d: %u | ",i, currentStart);
+        printf("Size%d : %u | ",i, packet.coeffs->size[i]);
         printf("alpha%d : %2x | ",i, packet.coeffs->alpha[i]);
-    } 
-    printf("\n");
+        printf("\n");
+    }
     
     payloadPrint(*(packet.payload));
 }
