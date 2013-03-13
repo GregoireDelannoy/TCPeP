@@ -147,3 +147,13 @@ void clearArrayFree(clearpacketarray* a){
     
     free(a);
 }
+
+void clearArrayRemove(clearpacketarray* a, int index){
+    int i;
+    clearPacketFree(a->packets[index]);
+    for(i=index; i<a->nPackets-1; i++){
+        a->packets[i] = a->packets[i+1];
+    }
+    a->packets = realloc(a->packets, (a->nPackets -1) * sizeof(clearpacket*));
+    a->nPackets--;
+}

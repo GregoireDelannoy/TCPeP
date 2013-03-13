@@ -20,7 +20,7 @@
 
 #define true 1==1
 #define false 1==0
-#define DEBUG false
+#define DEBUG true
 
 void do_debug(char *msg, ...);
 

@@ -4,13 +4,14 @@
 #include "coding.h"
 #include <netinet/in.h> 
 
+#define HELO_MSG "HELO"
+
 typedef struct muxstate_t {
     uint16_t sport;
     uint16_t dport;
     uint32_t remote_ip;
     
     uint32_t lastByteSent;
-    uint32_t lastByteAcked;
     encoderstate* encoderState;
     decoderstate* decoderState;
 } muxstate;
@@ -24,11 +25,14 @@ void clearPacketToBuffer(clearpacket p, char* buffer, int* size);
 int ipHeaderLength(char* buffer);
 
 int isData(char* buffer, int size);
+uint32_t getAckNumber(char* buffer);
+uint32_t getSeqNumber(char* buffer);
+
 
 
 /* On packets received via the TUN interface*/
 int isTCP(char* buffer, int size);
-void extractMuxInfosFromIP(char* buffer, int size, uint16_t* sport, uint16_t* dport, uint32_t* remote_ip);
+void extractMuxInfosFromIP(char* buffer, int size, uint16_t* sport, uint16_t* dport, uint32_t* source_ip, uint32_t* destination_ip);
 
 
 /* On packets received via UDP*/

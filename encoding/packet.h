@@ -63,6 +63,8 @@ void encodedArrayAppend(encodedpacketarray* a, encodedpacket* p);
 
 void clearArrayAppend(clearpacketarray* a, clearpacket* p);
 
+void clearArrayRemove(clearpacketarray* a, int index);
+
 encodedpacket* encodedPacketCopy(encodedpacket p);
 
 #endif

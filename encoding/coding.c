@@ -215,8 +215,19 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
     
     // DEBUG :
     if(state.lastByteSent >= clearPacket.indexStart){
-        printf("HiC : already sent >= to current indexStart. To prevent repacketization, no coded packet will be generated\n");
+        printf("HiCl : already sent >= to current indexStart. No coded packet will be generated\n");
     }
+    
+    // Actualize the state according to the last acked byte (= we don't have to hold those packets anymore)
+    printf("HiCl: size of the buffer before removing ACKed packets : %d\n", state.buffer->nPackets);
+    for(i=0; i<state.buffer->nPackets; i++){
+        if(state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size <= state.lastByteAcked){
+            printf("HiCl: Removing packet #%d from buffer (has been acked)\n", i);
+            clearArrayRemove(state.buffer, i);
+            i = 0;
+        }
+    }
+    printf("HiCl: after : %d\n", state.buffer->nPackets);
     
     //If the packet is a control packet, pass it along
     if(clearPacket.type == TYPE_CONTROL){
@@ -242,7 +253,7 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
         state.NUM = state.NUM + REDUNDANCY_FACTOR;
         
         for(i=0; i < (int)state.NUM; i++){
-            currentNCodedPackets = min(CODING_WINDOW + 1, state.buffer->nPackets);
+            currentNCodedPackets = min(CODING_WINDOW, state.buffer->nPackets);
             // Generate a random combination of packets in the coding window
             matrix* currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
             
@@ -305,7 +316,7 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state){ 
     ret->packets = 0;
     
     if(codedPacket.coeffs == 0){ // The packet is not really coded ; must be control
-        printf("Handle coded : Received a control packet\n");
+        printf("HiCo: Received a control packet\n");
         clearpacket* currentClearPacket = malloc(sizeof(clearpacket));
         currentClearPacket->payload = payloadCreate(codedPacket.payload->size, codedPacket.payload->data);
         currentClearPacket->type = TYPE_CONTROL;
@@ -315,10 +326,12 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state){ 
         addToInfosTable(state.clearInfosTable, state.nClearPackets, codedPacket);
         
         if(addIfInnovative(state.rrefCoeffs, state.invertedCoeffs, state.codedData, codedPacket, *(state.clearInfosTable), *(state.nClearPackets))){ // Then on the newly received packet
-            printf("Packet was innovative.\n");
+            printf("HiCo: Packet was innovative.\n");
             extractClear(state.rrefCoeffs, state.invertedCoeffs, state.codedData, *(state.clearInfosTable), *(state.nClearPackets), ret);
             // Because it was innovative, append the packet to the buffer
             encodedArrayAppend(state.buffer, encodedPacketCopy(codedPacket));
+        } else {
+            printf("HiCo: Packet not innovative ; drop\n");
         }
         
         //printf("Matrices states after adding all known packets.\nrref :\n");
@@ -368,6 +381,7 @@ encoderstate* encoderStateInit(){
     ret->buffer = malloc(sizeof(clearpacketarray));
     ret->buffer->nPackets = 0;
     ret->buffer->packets = 0;
+    ret->lastByteAcked = 0;
     ret->lastByteSent = 0;
     
     return ret;

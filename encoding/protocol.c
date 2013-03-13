@@ -37,11 +37,13 @@ int ipHeaderLength(char* buffer){
 }
 
 // Get ports and dst address from a TCP packet
-void extractMuxInfosFromIP(char* buffer, int size, uint16_t* sport, uint16_t* dport, uint32_t* remote_ip){
-    
+void extractMuxInfosFromIP(char* buffer, int size, uint16_t* sport, uint16_t* dport, uint32_t* source_ip, uint32_t* destination_ip){
     int ipHdrLen = ipHeaderLength(buffer);
     
-    memcpy(remote_ip, buffer + 15 , 4);
+    memcpy(source_ip, buffer + 16 , 4);
+    *source_ip = ntohl(*source_ip);
+    memcpy(destination_ip, buffer + 12 , 4);
+    *destination_ip = ntohl(*destination_ip);
     
     memcpy(sport, buffer + ipHdrLen, 2);
     *sport = ntohs(*sport);
@@ -66,7 +68,6 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** sta
     (*statesTable)[(*tableLength) - 1].sport = sport;
     (*statesTable)[(*tableLength) - 1].dport = dport;
     (*statesTable)[(*tableLength) - 1].remote_ip = remote_ip;
-    (*statesTable)[(*tableLength) - 1].lastByteAcked = 0;
     (*statesTable)[(*tableLength) - 1].lastByteSent = 0;
     (*statesTable)[(*tableLength) - 1].encoderState = encoderStateInit();
     (*statesTable)[(*tableLength) - 1].decoderState = decoderStateInit();
@@ -76,6 +77,7 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** sta
 
 void extractMuxInfosFromMuxed(char* buffer, uint16_t* sport, uint16_t* dport, uint32_t* remote_ip){
     memcpy(remote_ip, buffer, 4);
+    *remote_ip = ntohl(*remote_ip);
     memcpy(sport, buffer + 4, 2);
     *sport = ntohs(*sport);
     memcpy(dport, buffer + 6, 2);
@@ -135,7 +137,7 @@ clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen){
     ret->indexStart = ntohl(tmp);
     do_debug("bTCP: indexStart = %u\n", ret->indexStart);
     
-    ret->type = TYPE_DATA; // Note ; this is not always true ;)
+    ret->type = TYPE_DATA;
     ret->payload = payloadCreate(size, (uint8_t*)buffer);
     
     return ret;
@@ -146,4 +148,20 @@ clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen){
 void clearPacketToBuffer(clearpacket p, char* buffer, int* size){
     *size = p.payload->size;
     memcpy(buffer, p.payload->data, *size);
+}
+
+
+uint32_t getAckNumber(char* buffer){
+    uint32_t ret;
+    if((*(buffer + 13) & 0x10)){ // ack bit set
+        memcpy(&ret, buffer + 8, 4);
+        return ntohl(ret);
+    }
+    return 0;
+}
+
+uint32_t getSeqNumber(char* buffer){
+    uint32_t ret;
+    memcpy(&ret, buffer + 4, 4);
+    return ntohl(ret);
 }
