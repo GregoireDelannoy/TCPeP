@@ -142,6 +142,7 @@ int codingTest(){
                     // Send packets to the TCP application
                     printf("Sending packet to the application...\n");
                     clearPacketPrint(*(decoderReturn->packets[k]));
+                    encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size;
                 }
                 clearArrayFree(decoderReturn);
             }

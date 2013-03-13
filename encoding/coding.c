@@ -220,8 +220,11 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
     
     // Actualize the state according to the last acked byte (= we don't have to hold those packets anymore)
     printf("HiCl: size of the buffer before removing ACKed packets : %d\n", state.buffer->nPackets);
+    printf("HiCl: state.lastByteAcked = %u\n", state.lastByteAcked);
     for(i=0; i<state.buffer->nPackets; i++){
-        if(state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size <= state.lastByteAcked){
+        uint32_t currentLastByte = state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size;
+        printf("HiCl: packet #%d, currentLastByte = %u\n", i, currentLastByte);
+        if(currentLastByte <= state.lastByteAcked){
             printf("HiCl: Removing packet #%d from buffer (has been acked)\n", i);
             clearArrayRemove(state.buffer, i);
             i = 0;

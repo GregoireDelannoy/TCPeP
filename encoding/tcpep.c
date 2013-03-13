@@ -361,8 +361,12 @@ int main(int argc, char *argv[]) {
                     nMux = assignMux(sport, dport, dip, &muxTable, &tableLength);
                     do_debug("NET2TUN %lu: Assigned to mux #%d\n", net2tun, nMux);
                     
+                    
+                    do_debug("NET2TUN %lu:Last byte acked in state = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked);
+                    do_debug("NET2TUN %lu:Last byte acked in packet = %u\n", net2tun, getAckNumber(buffer + 8 + ipLength));
                     muxTable[nMux].encoderState->lastByteAcked = max(muxTable[nMux].encoderState->lastByteAcked, getAckNumber(buffer + 8 + ipLength));  // Actualize the last byte acked
-                    do_debug("NET2TUN %lu:Last byte acked = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked);
+                } else {
+                    do_debug("NET2TUN %lu: Is not TCP", net2tun);
                 }
                 
                 // Send it to the TUN interface
