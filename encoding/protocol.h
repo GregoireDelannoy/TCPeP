@@ -11,7 +11,6 @@ typedef struct muxstate_t {
     uint16_t dport;
     uint32_t remote_ip;
     
-    uint32_t lastByteSent;
     encoderstate* encoderState;
     decoderstate* decoderState;
 } muxstate;
@@ -24,7 +23,7 @@ void clearPacketToBuffer(clearpacket p, char* buffer, int* size);
 
 int ipHeaderLength(char* buffer);
 
-int isData(char* buffer, int size);
+int tcpDataLength(char* buffer, int size);
 uint32_t getAckNumber(char* buffer);
 uint32_t getSeqNumber(char* buffer);
 

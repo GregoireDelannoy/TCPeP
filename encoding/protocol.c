@@ -18,16 +18,15 @@ int isTCP(char* buffer, int size){
 }
 
 // Given a TCP packet, decide wether or not there's data in
-int isData(char* buffer, int size){
+int tcpDataLength(char* buffer, int size){
     uint8_t tcpHdrLength;
     memcpy(&tcpHdrLength, buffer + 12, 1); // Copy the Data Offset & reserved fields
     
     tcpHdrLength = 4 * ((tcpHdrLength >> 4) & 0x0F);
-    do_debug("isData: Data Offset = %u and size = %d\n", tcpHdrLength, size);
     if(size > 4 * tcpHdrLength){
-        return true;
+        return size - tcpHdrLength;
     } else {
-        return false;
+        return 0;
     }
 }
 
@@ -68,7 +67,6 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** sta
     (*statesTable)[(*tableLength) - 1].sport = sport;
     (*statesTable)[(*tableLength) - 1].dport = dport;
     (*statesTable)[(*tableLength) - 1].remote_ip = remote_ip;
-    (*statesTable)[(*tableLength) - 1].lastByteSent = 0;
     (*statesTable)[(*tableLength) - 1].encoderState = encoderStateInit();
     (*statesTable)[(*tableLength) - 1].decoderState = decoderStateInit();
     
@@ -115,19 +113,20 @@ void encodedPacketToBuffer(encodedpacket p, char* buffer, int* size){
     uint32_t tmp32;
     uint16_t tmp16; // Needed to perform the byte-order reversal
     
-    *size = (p.payload->size + 5 + p.coeffs->n * 5);
+    *size = (p.payload->size + 5 + p.coeffs->n * 6);
     tmp32 = htonl(p.coeffs->start1);
     memcpy(buffer, &tmp32, 4);
     memcpy(buffer + 4, &(p.coeffs->n), 1);
     for(i=0; i<p.coeffs->n; i++){
-        memcpy(buffer + 5 + 5*i, &(p.coeffs->alpha[i]), 1);
+        memcpy(buffer + 5 + 6*i, &(p.coeffs->alpha[i]), 1);
+        memcpy(buffer + 6 + 6*i, &(p.coeffs->hdrSize[i]), 1);
         tmp16 = htons(p.coeffs->start[i]);
-        memcpy(buffer + 6 + 5*i, &tmp16, 2);
+        memcpy(buffer + 7 + 6*i, &tmp16, 2);
         tmp16 = htons(p.coeffs->size[i]);
-        memcpy(buffer + 8 + 5*i, &tmp16, 2);
+        memcpy(buffer + 9 + 6*i, &tmp16, 2);
     }
     
-    memcpy(buffer + 5 + p.coeffs->n * 5, (char*)(p.payload->data), p.payload->size);
+    memcpy(buffer + 5 + p.coeffs->n * 6, (char*)(p.payload->data), p.payload->size);
 }
 
 clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen){
@@ -135,9 +134,9 @@ clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen){
     uint32_t tmp;
     memcpy(&tmp, buffer + 4 + ipHdrLen, 4);
     ret->indexStart = ntohl(tmp);
-    do_debug("bTCP: indexStart = %u\n", ret->indexStart);
     
-    ret->type = TYPE_DATA;
+    ret->hdrSize = (uint8_t)(size - tcpDataLength(buffer + ipHdrLen, size - ipHdrLen));
+    
     ret->payload = payloadCreate(size, (uint8_t*)buffer);
     
     return ret;

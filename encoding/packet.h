@@ -16,6 +16,7 @@ typedef struct coeffs_t {
     uint8_t* alpha;  // Coefficient for the n-th segment
     uint16_t* start; // Starting sequence number for the 1+ packets ; relative to previous packet
     uint16_t* size;  // Real size of the n-th segment (can be padded with zeros )
+    uint8_t* hdrSize;  // headers (IP and TCP) size in the n-th segment
 } coeffs;
 
 typedef struct encodedpacket_t {
@@ -25,7 +26,7 @@ typedef struct encodedpacket_t {
 
 typedef struct clearpacket_t {
     int indexStart;
-    uint8_t type;
+    uint8_t hdrSize;
     payload* payload;
 } clearpacket;
 
@@ -45,7 +46,7 @@ void encodedPacketPrint(encodedpacket packet);
 
 void clearPacketPrint(clearpacket packet);
 
-clearpacket* clearPacketCreate(int index, int size, uint8_t* data);
+clearpacket* clearPacketCreate(int index, int size, uint8_t hdrSize, uint8_t* data);
 
 void clearPacketFree(clearpacket* p);
 

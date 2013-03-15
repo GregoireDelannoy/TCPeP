@@ -31,6 +31,7 @@ void encodedPacketPrint(encodedpacket packet){
         printf("start%d: %u | ",i, packet.coeffs->start[i]);
         printf("realStart%d: %u | ",i, currentStart);
         printf("Size%d : %u | ",i, packet.coeffs->size[i]);
+        printf("Headers Size%d : %u | ",i, packet.coeffs->hdrSize[i]);
         printf("alpha%d : %2x | ",i, packet.coeffs->alpha[i]);
         printf("\n");
     }
@@ -45,6 +46,7 @@ void encodedPacketFree(encodedpacket* p){
         free(p->coeffs->alpha);
         free(p->coeffs->start);
         free(p->coeffs->size);
+        free(p->coeffs->hdrSize);
         free(p->coeffs);
     }
     
@@ -53,17 +55,18 @@ void encodedPacketFree(encodedpacket* p){
 }
 
 void clearPacketPrint(clearpacket packet){
+    printf("Start : %u | Size : %u | incl headers : %u", packet.indexStart, packet.payload->size, packet.hdrSize);
     payloadPrint(*(packet.payload));
 }
 
-clearpacket* clearPacketCreate(int index, int size, uint8_t* data){
+clearpacket* clearPacketCreate(int index, int size, uint8_t hdrSize, uint8_t* data){
     clearpacket* ret = malloc(sizeof(clearpacket));
     payload* p = payloadCreate(size, data);
     
     ret->indexStart = index;
     ret->payload = p;
     
-    ret->type = TYPE_DATA; // By default, data
+    ret->hdrSize = hdrSize;
     
     return ret;
 }
@@ -116,6 +119,8 @@ encodedpacket* encodedPacketCopy(encodedpacket p){
     memcpy(ret->coeffs->start, p.coeffs->start, p.coeffs->n * sizeof(uint16_t));
     ret->coeffs->size = malloc(p.coeffs->n * sizeof(uint16_t));
     memcpy(ret->coeffs->size, p.coeffs->size, p.coeffs->n * sizeof(uint16_t));
+    ret->coeffs->hdrSize = malloc(p.coeffs->n * sizeof(uint8_t));
+    memcpy(ret->coeffs->hdrSize, p.coeffs->hdrSize, p.coeffs->n * sizeof(uint8_t));
     ret->coeffs->alpha = malloc(p.coeffs->n * sizeof(uint8_t));
     memcpy(ret->coeffs->alpha, p.coeffs->alpha, p.coeffs->n * sizeof(uint8_t));
     

@@ -17,6 +17,7 @@
 typedef struct clearinfos_t {
     uint32_t start;
     uint16_t size;
+    uint8_t hdrSize;
 } clearinfos;
 
 
@@ -25,15 +26,15 @@ typedef struct decoderstate_t {
     matrix* invertedCoeffs;
     matrix* codedData;
     clearinfos** clearInfosTable;
-    int nClearPackets[1];
+    int* nClearPackets;
     encodedpacketarray* buffer;
+    uint32_t lastByteSent;
 } decoderstate;
 
 typedef struct encoderstate_t {
-    float NUM;
+    float* NUM;
     clearpacketarray* buffer;
     uint32_t lastByteAcked;
-    uint32_t lastByteSent;
 } encoderstate;
 
 clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state);

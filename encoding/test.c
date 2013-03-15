@@ -9,8 +9,8 @@
 #include "coding.h"
 
 #define PACKET_LENGTH 10
-#define CLEAR_PACKETS 10
-#define LOSS 0.1
+#define CLEAR_PACKETS 20
+#define LOSS 0.3
 
 
 int galoisTest(){
@@ -72,13 +72,14 @@ int packetTest(){
     int isOk = true;
     uint8_t data[2] = {0xFF, 0xFF};
     
-    clearpacket* cp = clearPacketCreate(10, 2, data);
+    clearpacket* cp = clearPacketCreate(10, 2, 0, data);
     encodedpacket* ep = malloc(sizeof(encodedpacket));
     ep->payload = payloadCreate(2, data);
     ep->coeffs = malloc(sizeof(coeffs));
     ep->coeffs->alpha = malloc(2 * sizeof(uint8_t));
     ep->coeffs->size = malloc(2 * sizeof(uint16_t));
     ep->coeffs->start = malloc(2 * sizeof(uint16_t));
+    ep->coeffs->hdrSize = malloc(1 * sizeof(uint8_t));
     
     clearPacketFree(cp);
     encodedPacketFree(ep);
@@ -115,16 +116,8 @@ int codingTest(){
     for(i=0; i<CLEAR_PACKETS; i++){
         printf("\n~~ Round start : generating clear packet #%d.\n", i);
         
-        if(i != 0){
-            // Form a correct clear packet :
-            currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, Ps->data[i]);
-            //currentClearPacket = clearPacketCreate((uint16_t)random(), (uint16_t)random(), Ps->data[i]);
-            currentClearPacket->type = TYPE_DATA;
-        } else {
-            // Form a CONTROL packet :
-            currentClearPacket = clearPacketCreate(0, 10, Ps->data[0]);
-            currentClearPacket->type = TYPE_CONTROL;
-        }
+        currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, 3, Ps->data[i]);
+
         
         // Handle it
         encoderReturn = handleInClear(*currentClearPacket, *encoderState);
@@ -141,8 +134,17 @@ int codingTest(){
                 for(k = 0; k < decoderReturn->nPackets;k++){ // For each clear packets returned
                     // Send packets to the TCP application
                     printf("Sending packet to the application...\n");
+                    
+                    decoderState->lastByteSent = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size;
                     clearPacketPrint(*(decoderReturn->packets[k]));
-                    encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size;
+                    
+                    // As if we received an ACK :
+                    if(((1.0 * random())/RAND_MAX) < LOSS){
+                        printf("ACK has been lost\n");
+                    } else {
+                        printf("ACK received\n");
+                        encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size + 1;
+                    }
                 }
                 clearArrayFree(decoderReturn);
             }

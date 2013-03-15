@@ -27,7 +27,7 @@
 #define CLIENT 0
 #define SERVER 1
 #define PORT 55555
-#define MTU 1500 - (28 + 8 + 5 + 5 * CODING_WINDOW)
+#define MTU 1400 - (28 + 8 + 5 + 5 * CODING_WINDOW)
 // mtu = standard MTU - overhead ( = IP + UDP + Mux info + Coding infos) 
 
 char *progname;
@@ -275,7 +275,7 @@ int main(int argc, char *argv[]) {
                 nMux = assignMux(sport, dport, dip, &muxTable, &tableLength);
                 do_debug("TUN2NET %lu:Assigned to mux #%d\n", tun2net, nMux);
                 
-                if(isData(buffer + ipLength, nread - ipLength)){
+                if(tcpDataLength(buffer + ipLength, nread - ipLength) > 0){
                     do_debug("TUN2NET %lu: Packet has data in it; encode.\n", tun2net);
                     do_debug("TUN2NET %lu: Creating a clear packet out of the buffer :\n", tun2net);
                     tmpClearPacket = bufferToClearPacket(buffer, nread, ipLength);
@@ -331,26 +331,27 @@ int main(int argc, char *argv[]) {
                 clearPacketArray = handleInCoded(*tmpEncodedPacket, *(muxTable[nMux].decoderState));
                 do_debug("NET2TUN %lu: %d packets has been decoded.\n", net2tun, clearPacketArray->nPackets);
                 for(i=0; i<clearPacketArray->nPackets; i++){
+                    do_debug("NET2TUN %lu: packet #%d", net2tun, i);
+                    clearPacketPrint(*(clearPacketArray->packets[i]));
+                    
                     // Assuming no reordering...
-                    if((clearPacketArray->packets[i]->indexStart + clearPacketArray->packets[i]->payload->size) > muxTable[nMux].lastByteSent){ // Not send yet ; send
-                        muxTable[nMux].lastByteSent = (clearPacketArray->packets[i]->indexStart + clearPacketArray->packets[i]->payload->size);
-                        
-                        clearPacketToBuffer(*(clearPacketArray->packets[i]), buffer, (int*)&nread);
-                        
-                        // Inspect generated packet
-                        ipLength = ipHeaderLength(buffer);
-                        muxTable[nMux].encoderState->lastByteAcked = max(muxTable[nMux].encoderState->lastByteAcked, getAckNumber(buffer + ipLength));  // Actualize the last byte acked
-                        do_debug("NET2TUN %lu: Last byte acked = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked);
-                        nwrite = cwrite(tun_fd, buffer, nread);
-                        do_debug("NET2TUN %lu: Written %d bytes to the tun interface out of a %d bytes clear packet #%d\n", net2tun, nwrite, nread, i);
-                    } else {
-                        do_debug("NET2TUN %lu: Packet already sent ; not sending.\n", net2tun);
-                    }
+                    clearPacketToBuffer(*(clearPacketArray->packets[i]), buffer, (int*)&nread);
+                    
+                    // Inspect generated packet
+                    ipLength = ipHeaderLength(buffer);
+                    muxTable[nMux].encoderState->lastByteAcked = max(muxTable[nMux].encoderState->lastByteAcked, getAckNumber(buffer + ipLength));  // Actualize the last byte acked
+                    muxTable[nMux].decoderState->lastByteSent = max(muxTable[nMux].decoderState->lastByteSent, getSeqNumber(buffer+ipLength)); // Actualize the last byte sent
+                    
+                    do_debug("NET2TUN %lu: Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
+
+                    nwrite = cwrite(tun_fd, buffer, nread);
+                    do_debug("NET2TUN %lu: Written %d bytes to the tun interface out of a %d bytes clear packet #%d\n", net2tun, nwrite, nread, i);
                 }
                 clearArrayFree(clearPacketArray);
-            } else { // Just send it
+            } else { // Not muxed ; just send it
                 // Inspect generated packet
                 if(isTCP(buffer + 8, nread - 8)){
+                    do_debug("NET2TUN %lu: unMuxed packet is TCP.\n");
                     if(cliserv == CLIENT){
                         extractMuxInfosFromIP(buffer + 8, nread - 8, &dport, &sport, &dip, &sip);
                     } else { // Note : by convention, we invert data on the proxy side ; so that 1 connection = effectively 1 mux
@@ -361,10 +362,11 @@ int main(int argc, char *argv[]) {
                     nMux = assignMux(sport, dport, dip, &muxTable, &tableLength);
                     do_debug("NET2TUN %lu: Assigned to mux #%d\n", net2tun, nMux);
                     
+                    ipLength = ipHeaderLength(buffer+8);
                     
-                    do_debug("NET2TUN %lu:Last byte acked in state = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked);
-                    do_debug("NET2TUN %lu:Last byte acked in packet = %u\n", net2tun, getAckNumber(buffer + 8 + ipLength));
                     muxTable[nMux].encoderState->lastByteAcked = max(muxTable[nMux].encoderState->lastByteAcked, getAckNumber(buffer + 8 + ipLength));  // Actualize the last byte acked
+                    muxTable[nMux].decoderState->lastByteSent = max(muxTable[nMux].decoderState->lastByteSent, getSeqNumber(buffer + 8 + ipLength)); // Actualize the last byte sent
+                    do_debug("NET2TUN %lu: Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
                 } else {
                     do_debug("NET2TUN %lu: Is not TCP", net2tun);
                 }
