@@ -8,8 +8,8 @@
 #include "packet.h"
 #include "coding.h"
 
-#define PACKET_LENGTH 10
-#define CLEAR_PACKETS 3
+#define PACKET_LENGTH 15
+#define CLEAR_PACKETS 10
 #define LOSS 0
 
 
@@ -97,7 +97,10 @@ int maxMinTest(){
 }
 
 int codingTest(){
-    int i, j, k;
+    int i, j, k, l;
+    uint16_t len[CLEAR_PACKETS];
+    uint32_t start[CLEAR_PACKETS];
+    int isReceived[CLEAR_PACKETS];
     uint32_t currSeqNo = (uint32_t)random();
     uint16_t currLen;
     uint8_t currHdrLen;
@@ -119,16 +122,17 @@ int codingTest(){
     for(i=0; i<CLEAR_PACKETS; i++){
         printf("\n~~ Round start : generating clear packet #%d.\n", i);
         
-        currLen = (uint16_t)random();
-        currLen = min(PACKET_LENGTH, currLen);
-        
-        currHdrLen = (uint8_t)((random() & currLen) - 1);
-        
+        currLen = random() & (PACKET_LENGTH - 1);
+        currLen ++;
+        len[i] = currLen;
+        currHdrLen = random() & (currLen - 1);
+        start[i] = currSeqNo;
         currentClearPacket = clearPacketCreate(currSeqNo, currLen, currHdrLen, Ps->data[i]);
+        clearPacketPrint(*currentClearPacket);
+        
+        isReceived[i] = false;
         
         currSeqNo += currLen - currHdrLen;
-        
-        clearPacketPrint(*currentClearPacket);
         
         // Handle it
         encoderReturn = handleInClear(*currentClearPacket, *encoderState);
@@ -146,7 +150,7 @@ int codingTest(){
                     // Send packets to the TCP application
                     printf("Sending packet to the application...\n");
                     
-                    decoderState->lastByteSent = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize;
+                    decoderState->lastByteSent = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize - 1;
                     
                     clearPacketPrint(*(decoderReturn->packets[k]));
                     
@@ -156,6 +160,26 @@ int codingTest(){
                     } else {
                         printf("ACK received\n");
                         encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize + 1;
+                    }
+                    
+                    // Test if the packet matches something :
+                    for(l = 0; l <= i; l++){
+                        if(decoderReturn->packets[k]->indexStart == start[l]){
+                            printf("Returned packet %d has same start as clear packet %d", k, l);
+                            if(decoderReturn->packets[k]->payload->size == len[l]){
+                                printf(" and the same size");
+                                if(memcmp(decoderReturn->packets[k]->payload->data, Ps->data[l] ,decoderReturn->packets[k]->payload->size * sizeof(uint8_t)) == 0){
+                                    printf(" and the same data");
+                                    isReceived[l] = true;
+                                } else {
+                                    printf(" but different data");
+                                }
+                            } else {
+                                printf(" but a different size");
+                            }
+                            
+                            printf("\n");
+                        }
                     }
                 }
                 clearArrayFree(decoderReturn);
@@ -170,6 +194,14 @@ int codingTest(){
     mFree(Ps);
     decoderStateFree(decoderState);
     encoderStateFree(encoderState);
+    
+    for(i=0; i<CLEAR_PACKETS; i++){
+        if(isReceived[i]){
+            printf("Clear packet #%d received\n", i);
+        } else {
+            printf("Clear packet #%d lost\n", i);
+        }
+    }
     
     return true;
 }

@@ -59,7 +59,7 @@ void clearPacketPrint(clearpacket packet){
     payloadPrint(*(packet.payload));
 }
 
-clearpacket* clearPacketCreate(int index, int size, uint8_t hdrSize, uint8_t* data){
+clearpacket* clearPacketCreate(uint32_t index, uint16_t size, uint8_t hdrSize, uint8_t* data){
     clearpacket* ret = malloc(sizeof(clearpacket));
     payload* p = payloadCreate(size, data);
     
@@ -78,13 +78,10 @@ void clearPacketFree(clearpacket* p){
 
 payload* payloadCreate(int size, uint8_t* data){ // Create a payload, copying the data
     payload* ret = malloc(sizeof(payload));
-    int i;
     ret->data = malloc(size * sizeof(uint8_t));
     
     ret->size = size;
-    for(i=0; i<size; i++){
-        ret->data[i] = data[i];
-    }
+    memcpy(ret->data, data, size * sizeof(uint8_t));
     
     return ret;
 }

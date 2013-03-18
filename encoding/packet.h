@@ -46,7 +46,7 @@ void encodedPacketPrint(encodedpacket packet);
 
 void clearPacketPrint(clearpacket packet);
 
-clearpacket* clearPacketCreate(int index, int size, uint8_t hdrSize, uint8_t* data);
+clearpacket* clearPacketCreate(uint32_t index, uint16_t size, uint8_t hdrSize, uint8_t* data);
 
 void clearPacketFree(clearpacket* p);
 

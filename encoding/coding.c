@@ -130,6 +130,10 @@ int addIfInnovative(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedDat
         if(!nullVector && (rrefVector[currentPacketNumber] != 0x00)){ // Packet is innovative. Add to the pool
             //printf("AddIf: Packet is innovative ! Let's add it.\n");
             
+            mGrow(rrefCoeffs, decodingWindow);
+            mGrow(invertedCoeffs, decodingWindow);
+            mGrow(codedData, max(codedData->nColumns, packet.payload->size));
+            
             // Compute inverted vector (basically, a unity vector to which we apply the same reduction operations)
             invertedVector = calloc(decodingWindow, sizeof(uint8_t));
             dataVector = calloc(max(codedData->nColumns, packet.payload->size) , sizeof(uint8_t));
@@ -138,6 +142,7 @@ int addIfInnovative(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedDat
             invertedVector[currentPacketNumber] = 1;
             for(i=0; i<currentPacketNumber; i++){ // Eliminate
                 rowMulSub(invertedVector, invertedCoeffs->data[i], factorVector[i], min(decodingWindow, invertedCoeffs->nColumns));
+                // Note : the following line makes the entire thing buggy. Hurrah.
                 rowMulSub(dataVector, codedData->data[i], factorVector[i], codedData->nColumns);
             }
 
@@ -148,11 +153,8 @@ int addIfInnovative(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedDat
             rowReduce(dataVector, factor, codedData->nColumns);
 
             // Append to the pool of encoded packets => Need to correct the matrices size
-            mGrow(rrefCoeffs, decodingWindow);
             mAppendVector(rrefCoeffs, rrefVector);
-            mGrow(invertedCoeffs, decodingWindow);
             mAppendVector(invertedCoeffs, invertedVector);
-            mGrow(codedData, max(codedData->nColumns, packet.payload->size));
             mAppendVector(codedData, dataVector);
         } else {
             //printf("AddIf: Packet is not innovative. Dropped.\n");
@@ -199,7 +201,7 @@ void extractClear(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedData,
         
         if(isReduced){
             printf("ExtractClear: vector #%d is reduced => 1 clear payload possible\n", i);
-            if(infosTable[i].start + infosTable[i].size - infosTable[i].hdrSize > lastByteSent){
+            if(infosTable[i].start > lastByteSent){
                 printf("ExtractClear: Packet has not been sent yet, append to the return array\n");
                 // If isReduced, we got a vector like that : 0...0 1 0...0 in the rref matrix => The i-th clear packet has been decoded (and is actually in the codedData matrix)
                 currentClearPacket = clearPacketCreate(infosTable[i].start, infosTable[i].size, infosTable[i].hdrSize, codedData->data[i]);
@@ -254,7 +256,14 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
     for(i=0; i < (int)(*(state.NUM)); i++){
         currentNCodedPackets = min(CODING_WINDOW, state.buffer->nPackets);
         // Generate a random combination of packets in the coding window
-        matrix* currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
+        
+        matrix * currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
+        
+        //DEBUG
+        //if(currentNCodedPackets == 1){
+            //mFree(currentCoefficents);
+            //currentCoefficents = getIdentityMatrix(1);
+        //}
         
         // Find the biggest packet in the buffer
         currentBiggestPacket = 0;
@@ -267,9 +276,8 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
         
         // Fill the Matrix with data from packets
         for(j=0; j<currentNCodedPackets; j++){
+            memset(payloads->data[j], 0x00, currentBiggestPacket);
             memcpy(payloads->data[j], state.buffer->packets[j]->payload->data, state.buffer->packets[j]->payload->size);
-            // Padd it with zeroes
-            memset(payloads->data[j] + state.buffer->packets[j]->payload->size, 0x00, currentBiggestPacket - state.buffer->packets[j]->payload->size);
         }
         
         // Compute the encoded payload

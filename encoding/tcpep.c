@@ -244,18 +244,15 @@ int main(int argc, char *argv[]) {
         do_debug("\n\n~~~~~~~~~~\nEntering select\n");
         ret = select(maxfd + 1, &rd_set, NULL, NULL, NULL);
 
-        if (ret < 0 && errno == EINTR){
+        if (ret < 0 && errno == EINTR){ // If the program was woken up due to an interruption, continue
             continue;
-        }
-
-        if (ret < 0) {
+        } else if (ret < 0) { // If it was another error, die.
             perror("select()");
             exit(1);
         }
 
         if(FD_ISSET(tun_fd, &rd_set)) {
             /* data from tun: just read it and write it to the network */
-            
             nread = cread(tun_fd, buffer, BUFSIZE);
 
             tun2net++;
@@ -296,13 +293,14 @@ int main(int argc, char *argv[]) {
                     }
                     encodedArrayFree(encodedPacketArray);
                 } else {
-                    do_debug("TUN2NET %lu TCP packet has no data in it; send it unMuxed\n", tun2net);
+                    do_debug("TUN2NET %lu: TCP packet has no data in it; send it unMuxed\n", tun2net);
                     memset(tmp, 0x00, 8);
                     memcpy(tmp + 8, buffer, nread);
                     nwrite = udpSend(sock_fd, tmp, nread + 8, (struct sockaddr*)&remote);
                     do_debug("TUN2NET %lu: Written %d bytes to the network\n", tun2net, nwrite);
                 }
             } else {
+                do_debug("TUN2NET %lu: Packet is not TCP, send it unMuxed\n", tun2net);
                 memset(tmp, 0x00, 8);
                 memcpy(tmp + 8, buffer, nread);
                 nwrite = udpSend(sock_fd, tmp, nread + 8, (struct sockaddr*)&remote);
@@ -331,6 +329,8 @@ int main(int argc, char *argv[]) {
                 clearPacketArray = handleInCoded(*tmpEncodedPacket, *(muxTable[nMux].decoderState));
                 do_debug("NET2TUN %lu: %d packets has been decoded.\n", net2tun, clearPacketArray->nPackets);
                 for(i=0; i<clearPacketArray->nPackets; i++){
+                    do_debug("NET2TUN %lu: Before current packet : Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
+                    
                     do_debug("NET2TUN %lu: packet #%d\n", net2tun, i);
                     clearPacketPrint(*(clearPacketArray->packets[i]));
                     
@@ -347,7 +347,7 @@ int main(int argc, char *argv[]) {
                     do_debug("NET2TUN %lu: Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
                 }
                 clearArrayFree(clearPacketArray);
-            } else { // Not muxed ; just send it
+            } else { // Not muxed ; just send it after inspection
                 // Inspect generated packet
                 if(isTCP(buffer + 8, nread - 8)){
                     do_debug("NET2TUN %lu: unMuxed packet is TCP.\n", net2tun);
@@ -361,12 +361,14 @@ int main(int argc, char *argv[]) {
                     nMux = assignMux(sport, dport, dip, &muxTable, &tableLength);
                     do_debug("NET2TUN %lu: Assigned to mux #%d\n", net2tun, nMux);
                     
-                    ipLength = ipHeaderLength(buffer+8);
+                    do_debug("NET2TUN %lu: Before actualizing : Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
+                    
+                    ipLength = ipHeaderLength(buffer + 8);
                     muxTable[nMux].encoderState->lastByteAcked = max(muxTable[nMux].encoderState->lastByteAcked, getAckNumber(buffer + 8 + ipLength));  // Actualize the last byte acked
                     muxTable[nMux].decoderState->lastByteSent = max(muxTable[nMux].decoderState->lastByteSent, getSeqNumber(buffer + 8 + ipLength) + tcpDataLength(buffer + 8 + ipLength, nread - 8 - ipLength) - 1); // Actualize the last byte sent
-                    do_debug("NET2TUN %lu: Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
+                    do_debug("NET2TUN %lu: After actualizing : Last byte acked = %u ; last byte sent = %u\n", net2tun, muxTable[nMux].encoderState->lastByteAcked, muxTable[nMux].decoderState->lastByteSent);
                 } else {
-                    do_debug("NET2TUN %lu: Is not TCP", net2tun);
+                    do_debug("NET2TUN %lu: Is not TCP\n", net2tun);
                 }
                 
                 // Send it to the TUN interface
