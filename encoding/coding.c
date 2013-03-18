@@ -197,12 +197,20 @@ void extractClear(matrix* rrefCoeffs, matrix* invertedCoeffs, matrix* codedData,
             }
         }
         
-        if(isReduced && (infosTable[i].start + (infosTable[i].size - infosTable[i].hdrSize) > lastByteSent)){
-            // If isReduced, we got a vector like that : 0...0 1 0...0 in the rref matrix => The i-th clear packet has been decoded (and is actually in the codedData matrix)
-            currentClearPacket = clearPacketCreate(infosTable[i].start, infosTable[i].size, infosTable[i].hdrSize, codedData->data[i]);
-            
-            // Add it to the array of decoded packets
-            clearArrayAppend(clearPackets, currentClearPacket);
+        if(isReduced){
+            printf("ExtractClear: vector #%d is reduced => 1 clear payload possible\n", i);
+            if(infosTable[i].start + infosTable[i].size - infosTable[i].hdrSize > lastByteSent){
+                printf("ExtractClear: Packet has not been sent yet, append to the return array\n");
+                // If isReduced, we got a vector like that : 0...0 1 0...0 in the rref matrix => The i-th clear packet has been decoded (and is actually in the codedData matrix)
+                currentClearPacket = clearPacketCreate(infosTable[i].start, infosTable[i].size, infosTable[i].hdrSize, codedData->data[i]);
+                
+                // Add it to the array of decoded packets
+                clearArrayAppend(clearPackets, currentClearPacket);
+            } else {
+                printf("ExtractClear: Packet has already been sent.\n");
+            }
+        } else {
+            printf("ExtractClear: vector #%d is NOT reduced\n", i);
         }
     }
 }
@@ -216,12 +224,15 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
     // Actualize the state according to the last acked byte (= we don't have to hold those packets anymore)
     printf("HiCl: size of the buffer before removing ACKed packets : %d\n", state.buffer->nPackets);
     printf("HiCl: state.lastByteAcked = %u\n", state.lastByteAcked);
-    for(i=0; i<state.buffer->nPackets; i++){
-        uint32_t currentLastByte = state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size - state.buffer->packets[i]->hdrSize;
+    i=0;
+    while(i<state.buffer->nPackets){
+        uint32_t currentLastByte = state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size - state.buffer->packets[i]->hdrSize - 1;
         if(currentLastByte < state.lastByteAcked){
             printf("HiCl: Removing packet #%d from buffer (has been acked)\n", i);
             clearArrayRemove(state.buffer, i);
             i = 0;
+        } else {
+            i++;
         }
     }
     printf("HiCl: after : %d\n", state.buffer->nPackets);
@@ -321,13 +332,13 @@ clearpacketarray* handleInCoded(encodedpacket codedPacket, decoderstate state){ 
     }
     
     printf("HiCo: lastByteSent = %u\n", state.lastByteSent);
-    //printf("Matrices states after adding all known packets.\nrref :\n");
-    //mPrint(*state.rrefCoeffs);
-    //printf("inv :\n");
-    //mPrint(*state.invertedCoeffs);
-    //printInfosTable(*(state.clearInfosTable), *(state.nClearPackets));
-    //printf("codedData :\n");
-    //mPrint(*state.codedData);
+    printf("Matrices states after adding all known packets.\nrref :\n");
+    mPrint(*state.rrefCoeffs);
+    printf("inv :\n");
+    mPrint(*state.invertedCoeffs);
+    printInfosTable(*(state.clearInfosTable), *(state.nClearPackets));
+    printf("codedData :\n");
+    mPrint(*state.codedData);
     return ret;
 }
 

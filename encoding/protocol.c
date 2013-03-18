@@ -23,7 +23,7 @@ int tcpDataLength(char* buffer, int size){
     memcpy(&tcpHdrLength, buffer + 12, 1); // Copy the Data Offset & reserved fields
     
     tcpHdrLength = 4 * ((tcpHdrLength >> 4) & 0x0F);
-    if(size > 4 * tcpHdrLength){
+    if(size > tcpHdrLength){
         return size - tcpHdrLength;
     } else {
         return 0;
@@ -94,16 +94,18 @@ encodedpacket* bufferToEncodedPacket(char* buffer, int size){
     ret->coeffs->alpha = malloc(ret->coeffs->n * sizeof(uint8_t));
     ret->coeffs->start = malloc(ret->coeffs->n * sizeof(uint16_t));
     ret->coeffs->size = malloc(ret->coeffs->n * sizeof(uint16_t));
+    ret->coeffs->hdrSize = malloc(ret->coeffs->n * sizeof(uint8_t));
     
     for(i=0; i<ret->coeffs->n; i++){
-        memcpy(&(ret->coeffs->alpha[i]), buffer + 5 + 5*i, 1);
-        memcpy(&(ret->coeffs->start[i]), buffer + 6 + 5*i, 2);
+        memcpy(&(ret->coeffs->alpha[i]), buffer + 5 + 6*i, 1);
+        memcpy(&(ret->coeffs->hdrSize[i]), buffer + 6 + 6*i, 1);
+        memcpy(&(ret->coeffs->start[i]), buffer + 7 + 6*i, 2);
         ret->coeffs->start[i] = ntohs(ret->coeffs->start[i]);
-        memcpy(&(ret->coeffs->size[i]), buffer + 8 + 5*i, 2);
+        memcpy(&(ret->coeffs->size[i]), buffer + 9 + 6*i, 2);
         ret->coeffs->size[i] = ntohs(ret->coeffs->size[i]);
     }
     
-    ret->payload = payloadCreate(size - (5 + 5 * ret->coeffs->n), (uint8_t*)(buffer + (5 + 5 * ret->coeffs->n)));
+    ret->payload = payloadCreate(size - (5 + 6 * ret->coeffs->n), (uint8_t*)(buffer + (5 + 6 * ret->coeffs->n)));
     
     return ret;
 }

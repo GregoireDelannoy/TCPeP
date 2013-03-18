@@ -11,7 +11,7 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define CODING_WINDOW 10
+#define CODING_WINDOW 2
 #define REDUNDANCY_FACTOR 1
 
 typedef struct clearinfos_t {

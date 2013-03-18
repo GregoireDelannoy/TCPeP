@@ -174,5 +174,8 @@ uint8_t gdiv(uint8_t a, uint8_t b) {
 
 uint8_t getRandom(){
     int n = random(); // Returns a number between 0 and RAND_MAX
+    while(((n & 0xFF) == 0x00)){
+        n = random();
+    }
     return (uint8_t)n; 
 }

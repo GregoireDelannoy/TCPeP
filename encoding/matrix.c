@@ -196,16 +196,20 @@ void mGrow(matrix* m, int newColumnSize){
 
 void rowReduce(uint8_t* row, uint8_t factor, int size){
     // Reduce a row st row[i] = row[i] / factor
-    int i;
-    for(i = 0; i < size ; i++){
-        row[i] = gdiv(row[i], factor);
+    if(factor != 0x01){
+        int i;
+        for(i = 0; i < size ; i++){
+            row[i] = gdiv(row[i], factor);
+        }
     }
 }
 
 void rowMulSub(uint8_t* a, uint8_t* b, uint8_t coeff, int size){
-    // a = a - b*c
-    int i;
-    for(i = 0; i < size ; i++){
-        a[i] = gsub(a[i], gmul(coeff, b[i]));
+    if(coeff != 0x00){
+        // a = a - b*c
+        int i;
+        for(i = 0; i < size ; i++){
+            a[i] = gsub(a[i], gmul(coeff, b[i]));
+        }
     }
 }

@@ -9,8 +9,8 @@
 #include "coding.h"
 
 #define PACKET_LENGTH 10
-#define CLEAR_PACKETS 20
-#define LOSS 0.3
+#define CLEAR_PACKETS 3
+#define LOSS 0
 
 
 int galoisTest(){
@@ -97,7 +97,10 @@ int maxMinTest(){
 }
 
 int codingTest(){
-    int i,j,k;
+    int i, j, k;
+    uint32_t currSeqNo = (uint32_t)random();
+    uint16_t currLen;
+    uint8_t currHdrLen;
     
     // Transient variables
     clearpacket* currentClearPacket;
@@ -116,8 +119,16 @@ int codingTest(){
     for(i=0; i<CLEAR_PACKETS; i++){
         printf("\n~~ Round start : generating clear packet #%d.\n", i);
         
-        currentClearPacket = clearPacketCreate(i * PACKET_LENGTH, PACKET_LENGTH, 3, Ps->data[i]);
-
+        currLen = (uint16_t)random();
+        currLen = min(PACKET_LENGTH, currLen);
+        
+        currHdrLen = (uint8_t)((random() & currLen) - 1);
+        
+        currentClearPacket = clearPacketCreate(currSeqNo, currLen, currHdrLen, Ps->data[i]);
+        
+        currSeqNo += currLen - currHdrLen;
+        
+        clearPacketPrint(*currentClearPacket);
         
         // Handle it
         encoderReturn = handleInClear(*currentClearPacket, *encoderState);
@@ -135,7 +146,8 @@ int codingTest(){
                     // Send packets to the TCP application
                     printf("Sending packet to the application...\n");
                     
-                    decoderState->lastByteSent = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size;
+                    decoderState->lastByteSent = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize;
+                    
                     clearPacketPrint(*(decoderReturn->packets[k]));
                     
                     // As if we received an ACK :
@@ -143,7 +155,7 @@ int codingTest(){
                         printf("ACK has been lost\n");
                     } else {
                         printf("ACK received\n");
-                        encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size + 1;
+                        encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize + 1;
                     }
                 }
                 clearArrayFree(decoderReturn);

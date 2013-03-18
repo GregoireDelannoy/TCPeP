@@ -55,7 +55,7 @@ void encodedPacketFree(encodedpacket* p){
 }
 
 void clearPacketPrint(clearpacket packet){
-    printf("Start : %u | Size : %u | incl headers : %u", packet.indexStart, packet.payload->size, packet.hdrSize);
+    printf("Start : %u | Size : %u | hdr Size : %u\n", packet.indexStart, packet.payload->size, packet.hdrSize);
     payloadPrint(*(packet.payload));
 }
 
