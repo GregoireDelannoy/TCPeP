@@ -11,13 +11,14 @@
 #include "matrix.h"
 #include "packet.h"
 
-#define CODING_WINDOW 2
-#define REDUNDANCY_FACTOR 1
+#define CODING_WINDOW 30 // Should be at least as large as TCP cwn
+#define REDUNDANCY_FACTOR 1.1
 
 typedef struct clearinfos_t {
     uint32_t start;
     uint16_t size;
     uint8_t hdrSize;
+    uint32_t nextSeqNo;
 } clearinfos;
 
 

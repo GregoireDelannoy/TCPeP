@@ -3,9 +3,9 @@
 void printInfosTable(clearinfos* table, int n){
     int i;
     printf("Info table @%lu, containing %d entries :\n", (uint64_t)table, n);
-    printf("|id : start : size : hdrSize|\n");
+    printf("|id : start : size : hdrSize ; nextSeqNo|\n");
     for(i=0; i<n; i++){
-        printf(" |%3d : %5u : %5u : %2u|\n", i, table[i].start, table[i].size, table[i].hdrSize);
+        printf(" |%3d : %5u : %5u : %2u : %5u|\n", i, table[i].start, table[i].size, table[i].hdrSize, table[i].nextSeqNo);
     }
 }
 
@@ -45,6 +45,7 @@ void addToInfosTable(clearinfos** table, int* n, encodedpacket packet){
                 // Test to ensure no repacketization
                 if((*table)[j].size != packet.coeffs->size[i]){
                     printf("handleInCoded: REPACKETIZATION OCURRED ! BAD. WILL PROBABLY DIE.\n");
+                    exit(-1);
                 }
             }
         }
@@ -53,6 +54,7 @@ void addToInfosTable(clearinfos** table, int* n, encodedpacket packet){
             (*table)[*n].start = currentStart;
             (*table)[*n].size = packet.coeffs->size[i];
             (*table)[*n].hdrSize = packet.coeffs->hdrSize[i];
+            (*table)[*n].nextSeqNo = currentStart + packet.coeffs->size[i] - packet.coeffs->hdrSize[i];
             *n = *n + 1;
         }
     }
@@ -223,22 +225,6 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
     ret->nPackets = 0;
     ret->packets = 0;
     
-    // Actualize the state according to the last acked byte (= we don't have to hold those packets anymore)
-    printf("HiCl: size of the buffer before removing ACKed packets : %d\n", state.buffer->nPackets);
-    printf("HiCl: state.lastByteAcked = %u\n", state.lastByteAcked);
-    i=0;
-    while(i<state.buffer->nPackets){
-        uint32_t currentLastByte = state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size - state.buffer->packets[i]->hdrSize - 1;
-        if(currentLastByte < state.lastByteAcked){
-            printf("HiCl: Removing packet #%d from buffer (has been acked)\n", i);
-            clearArrayRemove(state.buffer, i);
-            i = 0;
-        } else {
-            i++;
-        }
-    }
-    printf("HiCl: after : %d\n", state.buffer->nPackets);
-    
     // If the packet is not already in the coding buffer, add it. Suppose no repacketization for the moment
     isFound = false;
     for(i=0; i < state.buffer->nPackets && !isFound; i++){
@@ -251,70 +237,87 @@ encodedpacketarray* handleInClear(clearpacket clearPacket, encoderstate state){ 
         clearArrayAppend(state.buffer, clearPacketCreate(clearPacket.indexStart, clearPacket.payload->size, clearPacket.hdrSize, clearPacket.payload->data));
     }
     
-    *(state.NUM) = *(state.NUM) + REDUNDANCY_FACTOR;
-    
-    for(i=0; i < (int)(*(state.NUM)); i++){
-        currentNCodedPackets = min(CODING_WINDOW, state.buffer->nPackets);
-        // Generate a random combination of packets in the coding window
-        
-        matrix * currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
-        
-        //DEBUG
-        //if(currentNCodedPackets == 1){
-            //mFree(currentCoefficents);
-            //currentCoefficents = getIdentityMatrix(1);
-        //}
-        
-        // Find the biggest packet in the buffer
-        currentBiggestPacket = 0;
-        for(j=0; j<currentNCodedPackets; j++){
-            currentBiggestPacket = max(currentBiggestPacket, state.buffer->packets[j]->payload->size);
+    // Actualize the state according to the last acked byte (= we don't have to hold those packets anymore)
+    printf("HiCl: size of the buffer before removing ACKed packets : %d\n", state.buffer->nPackets);
+    printf("HiCl: state.lastByteAcked = %u\n", state.lastByteAcked);
+    i=0;
+    while(i<state.buffer->nPackets){
+        uint32_t currentLastByte = state.buffer->packets[i]->indexStart + state.buffer->packets[i]->payload->size - state.buffer->packets[i]->hdrSize;
+        if(currentLastByte < state.lastByteAcked){
+            printf("HiCl: Removing packet #%d from buffer (has been acked)\n", i);
+            clearArrayRemove(state.buffer, i);
+            i = 0;
+        } else {
+            i++;
         }
-        
-        // Compute the encoded payload, using matrices            
-        matrix* payloads = mCreate(currentNCodedPackets, currentBiggestPacket);
-        
-        // Fill the Matrix with data from packets
-        for(j=0; j<currentNCodedPackets; j++){
-            memset(payloads->data[j], 0x00, currentBiggestPacket);
-            memcpy(payloads->data[j], state.buffer->packets[j]->payload->data, state.buffer->packets[j]->payload->size);
-        }
-        
-        // Compute the encoded payload
-        matrix* encodedPayload = mMul(*currentCoefficents, *payloads);
-        
-        encodedpacket* currentEncodedPacket = malloc(sizeof(encodedpacket));
-        currentEncodedPacket->payload = payloadCreate(currentBiggestPacket, encodedPayload->data[0]);
-        
-        // Add headers
-        currentEncodedPacket->coeffs = malloc(sizeof(coeffs));
-        currentEncodedPacket->coeffs->n = currentNCodedPackets;
-        currentEncodedPacket->coeffs->start1 = state.buffer->packets[0]->indexStart;
-        currentIndex = state.buffer->packets[0]->indexStart;
-        currentEncodedPacket->coeffs->start = malloc(currentNCodedPackets * sizeof(uint16_t));
-        currentEncodedPacket->coeffs->size = malloc(currentNCodedPackets * sizeof(uint16_t));
-        currentEncodedPacket->coeffs->hdrSize = malloc(currentNCodedPackets * sizeof(uint8_t));
-        currentEncodedPacket->coeffs->alpha = malloc(currentNCodedPackets * sizeof(uint8_t));
-        
-        for(j=0; j<currentNCodedPackets; j++){
-            currentEncodedPacket->coeffs->start[j] = (uint16_t) (state.buffer->packets[j]->indexStart - currentIndex);                
-            currentEncodedPacket->coeffs->size[j] = state.buffer->packets[j]->payload->size;
-            currentEncodedPacket->coeffs->hdrSize[j] = state.buffer->packets[j]->hdrSize;
-            currentEncodedPacket->coeffs->alpha[j] = currentCoefficents->data[0][j];
-            currentIndex = state.buffer->packets[j]->indexStart;
-        }
-        
-        // Add the packet to the return array
-        encodedArrayAppend(ret, currentEncodedPacket);
-        
-        mFree(currentCoefficents);
-        mFree(payloads);
-        mFree(encodedPayload);
     }
+    printf("HiCl: after : %d\n", state.buffer->nPackets);
     
-    // Keep only the fractional part
-    *(state.NUM) = *(state.NUM) - (int)(*(state.NUM));
-    
+    // If there is something in the buffer, generate encoded packet(s)
+    if(state.buffer->nPackets > 0){
+        *(state.NUM) = *(state.NUM) + REDUNDANCY_FACTOR;
+        for(i=0; i < (int)(*(state.NUM)); i++){
+            currentNCodedPackets = min(CODING_WINDOW, state.buffer->nPackets);
+            // Generate a random combination of packets in the coding window
+            
+            matrix * currentCoefficents = getRandomMatrix(1, currentNCodedPackets);
+            
+            //DEBUG
+            //if(currentNCodedPackets == 1){
+                //mFree(currentCoefficents);
+                //currentCoefficents = getIdentityMatrix(1);
+            //}
+            
+            // Find the biggest packet in the buffer
+            currentBiggestPacket = 0;
+            for(j=0; j<currentNCodedPackets; j++){
+                currentBiggestPacket = max(currentBiggestPacket, state.buffer->packets[j]->payload->size);
+            }
+            
+            // Compute the encoded payload, using matrices            
+            matrix* payloads = mCreate(currentNCodedPackets, currentBiggestPacket);
+            
+            // Fill the Matrix with data from packets
+            for(j=0; j<currentNCodedPackets; j++){
+                memset(payloads->data[j], 0x00, currentBiggestPacket);
+                memcpy(payloads->data[j], state.buffer->packets[j]->payload->data, state.buffer->packets[j]->payload->size);
+            }
+            
+            // Compute the encoded payload
+            matrix* encodedPayload = mMul(*currentCoefficents, *payloads);
+            
+            encodedpacket* currentEncodedPacket = malloc(sizeof(encodedpacket));
+            currentEncodedPacket->payload = payloadCreate(currentBiggestPacket, encodedPayload->data[0]);
+            
+            // Add headers
+            currentEncodedPacket->coeffs = malloc(sizeof(coeffs));
+            currentEncodedPacket->coeffs->n = currentNCodedPackets;
+            currentEncodedPacket->coeffs->start1 = state.buffer->packets[0]->indexStart;
+            currentIndex = state.buffer->packets[0]->indexStart;
+            currentEncodedPacket->coeffs->start = malloc(currentNCodedPackets * sizeof(uint16_t));
+            currentEncodedPacket->coeffs->size = malloc(currentNCodedPackets * sizeof(uint16_t));
+            currentEncodedPacket->coeffs->hdrSize = malloc(currentNCodedPackets * sizeof(uint8_t));
+            currentEncodedPacket->coeffs->alpha = malloc(currentNCodedPackets * sizeof(uint8_t));
+            
+            for(j=0; j<currentNCodedPackets; j++){
+                currentEncodedPacket->coeffs->start[j] = (uint16_t) (state.buffer->packets[j]->indexStart - currentIndex);                
+                currentEncodedPacket->coeffs->size[j] = state.buffer->packets[j]->payload->size;
+                currentEncodedPacket->coeffs->hdrSize[j] = state.buffer->packets[j]->hdrSize;
+                currentEncodedPacket->coeffs->alpha[j] = currentCoefficents->data[0][j];
+                currentIndex = state.buffer->packets[j]->indexStart;
+            }
+            
+            // Add the packet to the return array
+            encodedArrayAppend(ret, currentEncodedPacket);
+            
+            mFree(currentCoefficents);
+            mFree(payloads);
+            mFree(encodedPayload);
+        }
+        
+        // Keep only the fractional part
+        *(state.NUM) = *(state.NUM) - (int)(*(state.NUM));
+    }
     return ret;
 }
 

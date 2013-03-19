@@ -8,7 +8,7 @@
 #include "packet.h"
 #include "coding.h"
 
-#define PACKET_LENGTH 15
+#define PACKET_LENGTH 50
 #define CLEAR_PACKETS 10
 #define LOSS 0
 
@@ -97,7 +97,7 @@ int maxMinTest(){
 }
 
 int codingTest(){
-    int i, j, k, l;
+    int i, j, k, l, ret = true;
     uint16_t len[CLEAR_PACKETS];
     uint32_t start[CLEAR_PACKETS];
     int isReceived[CLEAR_PACKETS];
@@ -125,7 +125,7 @@ int codingTest(){
         currLen = random() & (PACKET_LENGTH - 1);
         currLen ++;
         len[i] = currLen;
-        currHdrLen = random() & (currLen - 1);
+        currHdrLen = 1 + random() & (currLen - 1);
         start[i] = currSeqNo;
         currentClearPacket = clearPacketCreate(currSeqNo, currLen, currHdrLen, Ps->data[i]);
         clearPacketPrint(*currentClearPacket);
@@ -200,10 +200,13 @@ int codingTest(){
             printf("Clear packet #%d received\n", i);
         } else {
             printf("Clear packet #%d lost\n", i);
+            if(LOSS == 0){
+                ret = false;
+            }
         }
     }
     
-    return true;
+    return ret;
 }
 
 int main(int argc, char **argv){    
