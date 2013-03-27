@@ -6,10 +6,10 @@
 
 #define BASE_WINDOW 8.0 // Number of tokens to start with
 #define SS_THRESHOLD 16 // Slow start threshold
-#define SMOOTHING_FACTOR 0.05 // Smoothing factor
-#define TIMEOUT_FACTOR 3 // Timeout = factor * rtt
-#define INFLIGHT_FACTOR 1.5 // Gamma from the papers
-#define COMPUTING_DELAY  1000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
+#define SMOOTHING_FACTOR 0.01 // Smoothing factor
+#define TIMEOUT_FACTOR 30 // Timeout = factor * rtt
+#define INFLIGHT_FACTOR 5 // Gamma from the papers
+#define COMPUTING_DELAY  20000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
 
 typedef struct packetsentinfo_t{
     uint32_t seqNo;

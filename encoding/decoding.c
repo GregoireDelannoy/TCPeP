@@ -77,6 +77,7 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     
     // ~~ Try to decode ~~
     if((state->numBlock > 0) && (state->nPacketsInBlock[0] > 0)){
+        do_debug("Calling extractData() while numBlock = %d, currBlock = %d, nPacketInBlock[0] = %d\n", state->numBlock, state->currBlock, state->nPacketsInBlock[0]);
         extractData(state);
     }
     
@@ -255,6 +256,7 @@ void extractData(decoderstate* state){
                 state->blocks[i] = state->blocks[i+1];
                 state->coefficients[i] = state->coefficients[i+1];
                 state->nPacketsInBlock[i] = state->nPacketsInBlock[i+1];
+                state->isSentPacketInBlock[i] = state->isSentPacketInBlock[i+1];
             }
             
             state->numBlock--;

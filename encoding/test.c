@@ -11,8 +11,8 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 10
-#define LOSS 0.05
+#define CLEAR_PACKETS 1000
+#define LOSS 0.2
 
 
 int galoisTest(){
@@ -87,7 +87,7 @@ int codingTest(){
     int i, j, buf1Len, buf2Len;
     muxstate mState;
     mState.sport = 10; mState.dport = 10; mState.remote_ip = 10;
-    int nRounds = CLEAR_PACKETS;
+    int nRounds = CLEAR_PACKETS, sendSize;
     
     matrix* randomMatrix = getRandomMatrix(1, PACKETSIZE);
     mPrint(*randomMatrix);
@@ -95,13 +95,14 @@ int codingTest(){
     mFree(randomMatrix);
     
     for(i = 0; i<nRounds; i++){
-        printf("\n~~~~Starting round %d~~~~~\n", i);
-        encoderStatePrint(*encState);
-        decoderStatePrint(*decState);
-        printf("~~~~~~~~~\n");
-        
-        handleInClear(encState, buffer, PACKETSIZE);
-        totalBytesReceived += PACKETSIZE;
+        //printf("\n~~~~Starting round %d~~~~~\n", i);
+        //encoderStatePrint(*encState);
+        //decoderStatePrint(*decState);
+        //printf("~~~~~~~~~\n");
+
+        sendSize = min(PACKETSIZE, (int)(((1.0 *random())/RAND_MAX) * PACKETSIZE));
+        handleInClear(encState, buffer, sendSize);
+        totalBytesReceived += sendSize;
 
         // Send ACKs
         for(j = 0; j < decState->nAckToSend; j++){
@@ -110,10 +111,10 @@ int codingTest(){
             totalAckSent++;
             if(((1.0 * random())/RAND_MAX) > LOSS){
                 onAck(encState, buf2, buf2Len);
-                printf("Sent an ACK\n");
+                //printf("Sent an ACK\n");
                 totalAckReceived++;
             } else {
-                printf("Lost an ACK\n");
+                //printf("Lost an ACK\n");
             }
         }
         // Free
@@ -130,13 +131,13 @@ int codingTest(){
         for(j = 0; j < encState->nDataToSend; j++){
             bufferToMuxed(encState->dataToSend[j], buf1, encState->dataToSendSize[j], &buf1Len, mState, TYPE_DATA);
             muxedToBuffer(buf1, buf2, buf1Len, &buf2Len, &mState, &type);
-            totalDataPacketSent++;
+            totalDataPacketSent += buf2Len;
             if(((1.0 * random())/RAND_MAX) > LOSS){
                 handleInCoded(decState, buf2, buf2Len);
-                printf("Sent a DATA packet\n");
-                totalDataPacketReceived++;
+                //printf("Sent a DATA packet\n");
+                totalDataPacketReceived += buf2Len;
             } else {
-                printf("Lost a data packet\n");
+                //printf("Lost a data packet\n");
             }
             
         }
@@ -151,22 +152,22 @@ int codingTest(){
         encState->nDataToSend = 0;
         
         if(decState->nDataToSend > 0){
-            printf("Sent %d decoded bytes to the application\n", decState->nDataToSend);
+            //printf("Sent %d decoded bytes to the application\n", decState->nDataToSend);
             totalBytesSent += decState->nDataToSend;
             free(decState->dataToSend);
             decState->dataToSend = 0;
             decState->nDataToSend = 0;
         }
         
-        printf("\n~~~~End of round~~~~~\n");
-        encoderStatePrint(*encState);
-        decoderStatePrint(*decState);
-        printf("~~~~~~~~~\n");
+        //printf("\n~~~~End of round~~~~~\n");
+        //encoderStatePrint(*encState);
+        //decoderStatePrint(*decState);
+        //printf("~~~~~~~~~\n");
         
-        //usleep(100000);
+        usleep((1.0 * random() /RAND_MAX) * 10000);
     }
     
-    printf("During the %d rounds, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d Data Packets has been sent, %d received ( * %d = %d).\n%d Ack has been sent, %d received.\n Loss rate = %f.\n", nRounds, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, PACKETSIZE, PACKETSIZE * totalDataPacketReceived,totalAckSent, totalAckReceived, LOSS);
+    printf("During the %d rounds, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d bytes of Data Packets has been sent, %d received.\n%d Ack has been sent, %d received.\n Loss rate = %f. Transmission efficiency = %f\n", nRounds, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, totalAckSent, totalAckReceived, LOSS, 1.0 * totalBytesSent / totalDataPacketReceived);
     
     encoderStateFree(encState);
     decoderStateFree(decState);

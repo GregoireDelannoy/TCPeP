@@ -106,13 +106,11 @@ matrix* mMul(matrix a, matrix b){
 }
 
 matrix* mCopy(matrix orig){
-    int i,j;
+    int i;
     matrix* resultMatrix = mCreate(orig.nRows, orig.nColumns);
 
     for(i = 0; i < resultMatrix->nRows; i++){
-        for(j = 0; j < resultMatrix->nColumns; j++){
-            resultMatrix->data[i][j] = orig.data[i][j];
-        }
+        memcpy(resultMatrix->data[i], orig.data[i], resultMatrix->nColumns * sizeof(uint8_t));
     }
 
     return resultMatrix;

@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     int tcpListenerPort = 0, udpPort = 0;
     struct sockaddr_in local, remote, sourceAccept, destinationAccept, localConnect, remoteConnect;
     char remote_ip[16] = ""; /* dotted quad IP string */
-    int udpSock_fd, tcpListenerSock_fd, optval = 1;
+    int udpSock_fd, tcpListenerSock_fd = 0, optval = 1;
     int cliproxy = -1; /* must be specified on cmd line */
     uint8_t buffer[BUFSIZE], tmp[BUFSIZE];
     int selectReturnValue, maxfd;

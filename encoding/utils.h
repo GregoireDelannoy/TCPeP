@@ -24,7 +24,7 @@
 #define false 1==0
 #define DEBUG false
 
-#define BLKSIZE 127 // Block size (in number of packets)
+#define BLKSIZE 60 // Block size (in number of packets)
 #define PACKETSIZE 1300 // Maximum payload size (in bytes)
 
 void do_debug(char *msg, ...);

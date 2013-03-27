@@ -30,7 +30,7 @@ void onWindowUpdate(encoderstate* state){
         }
         
         if(state->RTT != 0){
-            addUSec(&timeOfArrival, state->RTT + COMPUTING_DELAY);
+            addUSec(&timeOfArrival, (state->RTT * INFLIGHT_FACTOR) + COMPUTING_DELAY);
         } else {
             addUSec(&timeOfArrival, 10000000); // Add 10 seconds, if RTT = 0
         }
@@ -55,9 +55,10 @@ void onWindowUpdate(encoderstate* state){
     while((totalInFlight < floor(state->congestionWindow)) && (sentInThisRound)){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
-            if(( i == 0) && (((1 - state->p) * nPacketsInFlight[i]) < (state->blocks[i].nPackets - state->currDof))){
+            printf("Block %d should receive ~%f packets\n", i, (1 - state->p) * nPacketsInFlight[i]);
+            if(( i == 0) && (roundf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
                 // ~~ Send from the first block ~~
-                do_debug("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
+                printf("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
@@ -65,7 +66,7 @@ void onWindowUpdate(encoderstate* state){
                 break;
             } else if((i != 0) && ((1 - state->p) * nPacketsInFlight[i]) < state->blocks[i].nPackets){
                 // ~~ Send from the i-th block ~~
-                do_debug("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
+                printf("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
@@ -131,9 +132,9 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     ackpacket* ack = bufferToAck(buffer, size);
     int losses, i, currentRTT;
     
-    // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Forget about it
+    // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Do not treat it
     if(ack->ack_seqNo < state->seqNo_Una){
-        do_debug("Outdated ACK, Drop !\n");
+        printf("Outdated ACK, Drop !\n");
         free(ack);
         return;
     }
@@ -161,8 +162,13 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     
     if(ack->ack_seqNo >= state->seqNo_Una){
         losses = ack->ack_seqNo - state->seqNo_Una;
-        do_debug("%d losses\n", losses);
-        state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
+        printf("%d losses, p = %f\n", losses, state->p);
+        
+        if(losses == 0){
+            state->p = state->p * (1.0 - 5 * SMOOTHING_FACTOR);
+        } else {
+            state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
+        }
         
         // Arbitrary idea : If there's no losses, reconciliate RTT & RTTmin.
         if(losses == 0){
