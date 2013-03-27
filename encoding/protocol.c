@@ -1,56 +1,7 @@
 #include "protocol.h"
 
 
-// Given a raw IP packet, decide wether or not it is a TCP packet
-int isTCP(char* buffer, int size){
-    if(size > 40){ // If packet size < 40 bytes, it cannot contain both IP and TCP headers.
-        // Assuming that we got an IP packet.
-        if((buffer[0] & 0xF0) == 0x40){
-            if(buffer[9] == 0x06){ // Buffer[9] = protocol field ; 6 = TCP
-                return true;
-            }
-        } else {
-            printf("Got an IPv6 packet... HELP !\n");
-        }
-    }
-    
-    return false;
-}
-
-// Given a TCP packet, decide wether or not there's data in
-int tcpDataLength(char* buffer, int size){
-    uint8_t tcpHdrLength;
-    memcpy(&tcpHdrLength, buffer + 12, 1); // Copy the Data Offset & reserved fields
-    
-    tcpHdrLength = 4 * ((tcpHdrLength >> 4) & 0x0F);
-    if(size > tcpHdrLength){
-        return size - tcpHdrLength;
-    } else {
-        return 0;
-    }
-}
-
-// Return the length of the IP header, in bytes.
-int ipHeaderLength(char* buffer){
-    return 4*(buffer[0] & 0x0F);
-}
-
-// Get ports and dst address from a TCP packet
-void extractMuxInfosFromIP(char* buffer, int size, uint16_t* sport, uint16_t* dport, uint32_t* source_ip, uint32_t* destination_ip){
-    int ipHdrLen = ipHeaderLength(buffer);
-    
-    memcpy(source_ip, buffer + 16 , 4);
-    *source_ip = ntohl(*source_ip);
-    memcpy(destination_ip, buffer + 12 , 4);
-    *destination_ip = ntohl(*destination_ip);
-    
-    memcpy(sport, buffer + ipHdrLen, 2);
-    *sport = ntohs(*sport);
-    memcpy(dport, buffer + ipHdrLen + 2, 2);
-    *dport = ntohs(*dport);
-}
-
-int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** statesTable, int* tableLength){
+int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, int sock_fd, muxstate** statesTable, int* tableLength){
     // If the mux is already known, return its index, otherwise create it
     int i;
     
@@ -67,102 +18,64 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** sta
     (*statesTable)[(*tableLength) - 1].sport = sport;
     (*statesTable)[(*tableLength) - 1].dport = dport;
     (*statesTable)[(*tableLength) - 1].remote_ip = remote_ip;
+    (*statesTable)[(*tableLength) - 1].sock_fd = sock_fd;
     (*statesTable)[(*tableLength) - 1].encoderState = encoderStateInit();
     (*statesTable)[(*tableLength) - 1].decoderState = decoderStateInit();
     
     return (*tableLength) - 1;
 }
 
-void extractMuxInfosFromMuxed(char* buffer, uint16_t* sport, uint16_t* dport, uint32_t* remote_ip){
-    memcpy(remote_ip, buffer, 4);
-    *remote_ip = ntohl(*remote_ip);
-    memcpy(sport, buffer + 4, 2);
-    *sport = ntohs(*sport);
-    memcpy(dport, buffer + 6, 2);
-    *dport = ntohs(*dport);
-}
-
-encodedpacket* bufferToEncodedPacket(char* buffer, int size){
-    encodedpacket* ret = malloc(sizeof(encodedpacket));
-    int i;
-    
-    ret->coeffs = malloc(sizeof(coeffs));
-    memcpy(&(ret->coeffs->start1), buffer,4);
-    ret->coeffs->start1 = ntohl(ret->coeffs->start1);
-    memcpy(&(ret->coeffs->n), buffer + 4, 1);
-    
-    ret->coeffs->alpha = malloc(ret->coeffs->n * sizeof(uint8_t));
-    ret->coeffs->start = malloc(ret->coeffs->n * sizeof(uint16_t));
-    ret->coeffs->size = malloc(ret->coeffs->n * sizeof(uint16_t));
-    ret->coeffs->hdrSize = malloc(ret->coeffs->n * sizeof(uint8_t));
-    
-    for(i=0; i<ret->coeffs->n; i++){
-        memcpy(&(ret->coeffs->alpha[i]), buffer + 5 + 6*i, 1);
-        memcpy(&(ret->coeffs->hdrSize[i]), buffer + 6 + 6*i, 1);
-        memcpy(&(ret->coeffs->start[i]), buffer + 7 + 6*i, 2);
-        ret->coeffs->start[i] = ntohs(ret->coeffs->start[i]);
-        memcpy(&(ret->coeffs->size[i]), buffer + 9 + 6*i, 2);
-        ret->coeffs->size[i] = ntohs(ret->coeffs->size[i]);
+void removeMux(int index, muxstate** statesTable, int* tableLength){
+    if(index >= (*tableLength)){
+        my_err("in removeMux : index>= size\n");
+        exit(1);
+    } else {
+        int i;
+        encoderStateFree((*statesTable)[index].encoderState);
+        decoderStateFree((*statesTable)[index].decoderState);
+        for(i = index; i < ((*tableLength) - 1); i++){
+            (*statesTable)[i] = (*statesTable)[i + 1];
+        }
+        (*tableLength)--;
+        *statesTable = realloc(*statesTable, (*tableLength) * sizeof(muxstate));
     }
-    
-    ret->payload = payloadCreate(size - (5 + 6 * ret->coeffs->n), (uint8_t*)(buffer + (5 + 6 * ret->coeffs->n)));
-    
-    return ret;
 }
 
-void encodedPacketToBuffer(encodedpacket p, char* buffer, int* size){
-    int i;
+
+void bufferToMuxed(uint8_t* src, uint8_t* dst, int srcLen, int* dstLen, muxstate mux, uint8_t type){
+    uint16_t tmp16;
     uint32_t tmp32;
-    uint16_t tmp16; // Needed to perform the byte-order reversal
+    uint8_t tmp8;
     
-    *size = (p.payload->size + 5 + p.coeffs->n * 6);
-    tmp32 = htonl(p.coeffs->start1);
-    memcpy(buffer, &tmp32, 4);
-    memcpy(buffer + 4, &(p.coeffs->n), 1);
-    for(i=0; i<p.coeffs->n; i++){
-        memcpy(buffer + 5 + 6*i, &(p.coeffs->alpha[i]), 1);
-        memcpy(buffer + 6 + 6*i, &(p.coeffs->hdrSize[i]), 1);
-        tmp16 = htons(p.coeffs->start[i]);
-        memcpy(buffer + 7 + 6*i, &tmp16, 2);
-        tmp16 = htons(p.coeffs->size[i]);
-        memcpy(buffer + 9 + 6*i, &tmp16, 2);
-    }
+    tmp16 = htons(mux.sport);
+    memcpy(dst, &tmp16, 2);
+    tmp16 = htons(mux.dport);
+    memcpy(dst + 2, &tmp16, 2);
+    tmp32 = htonl(mux.remote_ip);
+    memcpy(dst + 4, &tmp32, 4);
+    tmp8 = type;
+    memcpy(dst + 8, &tmp8, 1);
     
-    memcpy(buffer + 5 + p.coeffs->n * 6, (char*)(p.payload->data), p.payload->size);
+    memcpy(dst + 9, src, srcLen);
+    
+    (*dstLen) = srcLen + 9;
 }
 
-clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen){
-    clearpacket* ret = malloc(sizeof(clearpacket));
-    uint32_t tmp;
-    memcpy(&tmp, buffer + 4 + ipHdrLen, 4);
-    ret->indexStart = ntohl(tmp);
+void muxedToBuffer(uint8_t* src, uint8_t* dst, int srcLen, int* dstLen, muxstate* mux, uint8_t* type){
+    uint16_t tmp16;
+    uint32_t tmp32;
+    uint8_t tmp8;
+
+    memcpy(&tmp16, src, 2);
+    mux->sport = ntohs(tmp16);
+    memcpy(&tmp16, src + 2, 2);
+    mux->dport = ntohs(tmp16);
+    memcpy(&tmp32, src + 4, 4);
+    mux->remote_ip = ntohl(tmp32);
+    memcpy(&tmp8, src + 8, 1);
+    (*type) = tmp8;
     
-    ret->hdrSize = (uint8_t)(size - tcpDataLength(buffer + ipHdrLen, size - ipHdrLen));
+    memcpy(dst, src + 9, srcLen - 9);
     
-    ret->payload = payloadCreate(size, (uint8_t*)buffer);
-    
-    return ret;
-}
-
-
-
-void clearPacketToBuffer(clearpacket p, char* buffer, int* size){
-    *size = p.payload->size;
-    memcpy(buffer, p.payload->data, *size);
-}
-
-
-uint32_t getAckNumber(char* buffer){
-    uint32_t ret;
-    if((*(buffer + 13) & 0x10)){ // ack bit set
-        memcpy(&ret, buffer + 8, 4);
-        return ntohl(ret);
-    }
-    return 0;
-}
-
-uint32_t getSeqNumber(char* buffer){
-    uint32_t ret;
-    memcpy(&ret, buffer + 4, 4);
-    return ntohl(ret);
+    (*dstLen) = srcLen - 9;
 }

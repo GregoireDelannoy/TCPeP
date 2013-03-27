@@ -1,12 +1,20 @@
 #ifndef _PROTOCOL_
 #define _PROTOCOL_
 #include "utils.h"
-#include "coding.h"
-#include <netinet/in.h> 
+#include "packet.h"
+#include "decoding.h"
+#include "encoding.h"
 
-#define HELO_MSG "HELO"
+#define HELO_MSG (uint8_t*)"HELO"
+#define TYPE_DATA 0x00
+#define TYPE_OPEN 0x01
+#define TYPE_CLOSE 0x02
+#define TYPE_ACK 0x03
+
 
 typedef struct muxstate_t {
+    int sock_fd;
+    
     uint16_t sport;
     uint16_t dport;
     uint32_t remote_ip;
@@ -15,30 +23,12 @@ typedef struct muxstate_t {
     decoderstate* decoderState;
 } muxstate;
 
-int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, muxstate** statesTable, int* tableLength);
-encodedpacket* bufferToEncodedPacket(char* buffer, int size);
-clearpacket* bufferToClearPacket(char* buffer, int size, int ipHdrLen);
-void encodedPacketToBuffer(encodedpacket p, char* buffer, int* size);
-void clearPacketToBuffer(clearpacket p, char* buffer, int* size);
+int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, int sock_fd, muxstate** statesTable, int* tableLength);
+void removeMux(int i, muxstate** statesTable, int* tableLength);
 
-int ipHeaderLength(char* buffer);
+void bufferToMuxed(uint8_t* src, uint8_t* dst, int srcLen, int* dstLen, muxstate mux, uint8_t type);
 
-int tcpDataLength(char* buffer, int size);
-uint32_t getAckNumber(char* buffer);
-uint32_t getSeqNumber(char* buffer);
-
-
-
-/* On packets received via the TUN interface*/
-int isTCP(char* buffer, int size);
-void extractMuxInfosFromIP(char* buffer, int size, uint16_t* sport, uint16_t* dport, uint32_t* source_ip, uint32_t* destination_ip);
-
-
-/* On packets received via UDP*/
-void extractMuxInfosFromMuxed(char* buffer, uint16_t* sport, uint16_t* dport, uint32_t* remote_ip);
-
-
-
+void muxedToBuffer(uint8_t* src, uint8_t* dst, int srcLen, int* dstLen, muxstate* mux, uint8_t* type);
 #endif
 
 

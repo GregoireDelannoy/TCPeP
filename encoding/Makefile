@@ -1,10 +1,10 @@
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -lm -O0
 
 VFLAGS = --track-origins=yes --leak-check=full --show-reachable=yes
 
-OBJ = galois_field.o matrix.o  packet.o tun.o coding.o utils.o protocol.o
-HDR = galois_field.h  matrix.h  packet.h  structures.h  utils.h tun.h coding.h protocol.h
+OBJ = galois_field.o matrix.o  packet.o encoding.o decoding.o utils.o protocol.o
+HDR = galois_field.h  matrix.h  packet.h  utils.h encoding.h decoding.h protocol.h
 
 %.o: %.c $(HDR)
 	$(CC) $(CFLAGS) -c $<

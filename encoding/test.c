@@ -6,11 +6,14 @@
 #include "galois_field.h"
 #include "matrix.h"
 #include "packet.h"
-#include "coding.h"
+#include "encoding.h"
+#include "decoding.h"
+#include "protocol.h"
+
 
 #define PACKET_LENGTH 50
 #define CLEAR_PACKETS 10
-#define LOSS 0
+#define LOSS 0.05
 
 
 int galoisTest(){
@@ -68,25 +71,6 @@ int matrixTest(){
     return isOk;
 }
 
-int packetTest(){
-    int isOk = true;
-    uint8_t data[2] = {0xFF, 0xFF};
-    
-    clearpacket* cp = clearPacketCreate(10, 2, 0, data);
-    encodedpacket* ep = malloc(sizeof(encodedpacket));
-    ep->payload = payloadCreate(2, data);
-    ep->coeffs = malloc(sizeof(coeffs));
-    ep->coeffs->alpha = malloc(2 * sizeof(uint8_t));
-    ep->coeffs->size = malloc(2 * sizeof(uint16_t));
-    ep->coeffs->start = malloc(2 * sizeof(uint16_t));
-    ep->coeffs->hdrSize = malloc(1 * sizeof(uint8_t));
-    
-    clearPacketFree(cp);
-    encodedPacketFree(ep);
-    
-    return isOk;
-}
-
 int maxMinTest(){
     if((max(1,2) == 2) && (min(2,1) == 1)){
         return true;
@@ -97,120 +81,101 @@ int maxMinTest(){
 }
 
 int codingTest(){
-    int i, j, k, l, ret = true;
-    uint16_t len[CLEAR_PACKETS];
-    uint32_t start[CLEAR_PACKETS];
-    int isReceived[CLEAR_PACKETS];
-    uint32_t currSeqNo = (uint32_t)random();
-    uint16_t currLen;
-    uint8_t currHdrLen;
+    encoderstate* encState = encoderStateInit();
+    decoderstate* decState = decoderStateInit();
+    uint8_t buffer[PACKETSIZE], buf1[2 * PACKETSIZE], buf2[2 * PACKETSIZE], type;
+    int totalBytesSent = 0, totalBytesReceived = 0, totalAckSent = 0, totalAckReceived = 0, totalDataPacketReceived = 0, totalDataPacketSent = 0;
+    int i, j, buf1Len, buf2Len;
+    muxstate mState;
+    mState.sport = 10; mState.dport = 10; mState.remote_ip = 10;
+    int nRounds = 100;
     
-    // Transient variables
-    clearpacket* currentClearPacket;
-    encodedpacketarray* encoderReturn;
-    clearpacketarray* decoderReturn;
+    matrix* randomMatrix = getRandomMatrix(1, PACKETSIZE);
+    mPrint(*randomMatrix);
+    memcpy(buffer, randomMatrix->data[0], PACKETSIZE);
+    mFree(randomMatrix);
     
-    encoderstate* encoderState = encoderStateInit();
-    decoderstate* decoderState = decoderStateInit();
+    for(i = 0; i<nRounds; i++){
+        printf("\n~~~~Starting round %d~~~~~\n", i);
+        encoderStatePrint(*encState);
+        decoderStatePrint(*decState);
+        printf("~~~~~~~~~\n");
         
-    // Generate clear packets
-    matrix* Ps = getRandomMatrix(CLEAR_PACKETS, PACKET_LENGTH);
-    printf("Original Packets : \n");
-    mPrint(*Ps);
-    
-    // Pass packets to the clear handler and pipe the output to the coded handler
-    for(i=0; i<CLEAR_PACKETS; i++){
-        printf("\n~~ Round start : generating clear packet #%d.\n", i);
-        
-        currLen = random() & (PACKET_LENGTH - 1);
-        currLen ++;
-        len[i] = currLen;
-        currHdrLen = 1 + random() & (currLen - 1);
-        start[i] = currSeqNo;
-        currentClearPacket = clearPacketCreate(currSeqNo, currLen, currHdrLen, Ps->data[i]);
-        clearPacketPrint(*currentClearPacket);
-        
-        isReceived[i] = false;
-        
-        currSeqNo += currLen - currHdrLen;
-        
-        // Handle it
-        encoderReturn = handleInClear(*currentClearPacket, *encoderState);
-        printf("%d encoded packets generated during this round.\n", encoderReturn->nPackets);
-        
-        // Pipe the generated packets to the coded handler, with loss
-        for(j = 0; j < encoderReturn->nPackets;j++){
-            if(((1.0 * random())/RAND_MAX) < LOSS){
-                printf("\nEncoded packet #%d has been lost\n", j);
+        handleInClear(encState, buffer, PACKETSIZE - 7);
+        totalBytesReceived += PACKETSIZE - 7;
+
+        // Send ACKs
+        for(j = 0; j < decState->nAckToSend; j++){
+            bufferToMuxed(decState->ackToSend[j], buf1, decState->ackToSendSize[j], &buf1Len, mState, TYPE_ACK);
+            muxedToBuffer(buf1, buf2, buf1Len, &buf2Len, &mState, &type);
+            totalAckSent++;
+            if(((1.0 * random())/RAND_MAX) > LOSS){
+                onAck(encState, buf2, buf2Len);
+                printf("Sent an ACK\n");
+                totalAckReceived++;
             } else {
-                printf("\nReceived encoded packet #%d\n", j);
-                decoderReturn = handleInCoded(*(encoderReturn->packets[j]), *decoderState);
-                printf("%d clear packet recovered during this round.\n", decoderReturn->nPackets);
-                for(k = 0; k < decoderReturn->nPackets;k++){ // For each clear packets returned
-                    // Send packets to the TCP application
-                    printf("Sending packet to the application...\n");
-                    
-                    decoderState->lastByteSent = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize - 1;
-                    
-                    clearPacketPrint(*(decoderReturn->packets[k]));
-                    
-                    // As if we received an ACK :
-                    if(((1.0 * random())/RAND_MAX) < LOSS){
-                        printf("ACK has been lost\n");
-                    } else {
-                        printf("ACK received\n");
-                        encoderState->lastByteAcked = decoderReturn->packets[k]->indexStart + decoderReturn->packets[k]->payload->size - decoderReturn->packets[k]->hdrSize + 1;
-                    }
-                    
-                    // Test if the packet matches something :
-                    for(l = 0; l <= i; l++){
-                        if(decoderReturn->packets[k]->indexStart == start[l]){
-                            printf("Returned packet %d has same start as clear packet %d", k, l);
-                            if(decoderReturn->packets[k]->payload->size == len[l]){
-                                printf(" and the same size");
-                                if(memcmp(decoderReturn->packets[k]->payload->data, Ps->data[l] ,decoderReturn->packets[k]->payload->size * sizeof(uint8_t)) == 0){
-                                    printf(" and the same data");
-                                    isReceived[l] = true;
-                                } else {
-                                    printf(" but different data");
-                                }
-                            } else {
-                                printf(" but a different size");
-                            }
-                            
-                            printf("\n");
-                        }
-                    }
-                }
-                clearArrayFree(decoderReturn);
+                printf("Lost an ACK\n");
             }
+        }
+        // Free
+        for(j = 0; j< decState->nAckToSend;j++){
+            free(decState->ackToSend[j]);
+        }
+        free(decState->ackToSend);
+        decState->ackToSend = 0;
+        free(decState->ackToSendSize);
+        decState->ackToSendSize = 0;
+        decState->nAckToSend = 0;
+
+        // Send coded data packets from the encoder
+        for(j = 0; j < encState->nDataToSend; j++){
+            bufferToMuxed(encState->dataToSend[j], buf1, encState->dataToSendSize[j], &buf1Len, mState, TYPE_DATA);
+            muxedToBuffer(buf1, buf2, buf1Len, &buf2Len, &mState, &type);
+            totalDataPacketSent++;
+            if(((1.0 * random())/RAND_MAX) > LOSS){
+                handleInCoded(decState, buf2, buf2Len);
+                printf("Sent a DATA packet\n");
+                totalDataPacketReceived++;
+            } else {
+                printf("Lost a data packet\n");
+            }
+            
+        }
+        // Free
+        for(j = 0; j< encState->nDataToSend;j++){
+            free(encState->dataToSend[j]);
+        }
+        free(encState->dataToSend);
+        encState->dataToSend=0;
+        free(encState->dataToSendSize);
+        encState->dataToSendSize = 0;
+        encState->nDataToSend = 0;
+        
+        if(decState->nDataToSend > 0){
+            printf("Sent %d decoded bytes to the application\n", decState->nDataToSend);
+            totalBytesSent += decState->nDataToSend;
+            free(decState->dataToSend);
+            decState->dataToSend = 0;
+            decState->nDataToSend = 0;
         }
         
-        encodedArrayFree(encoderReturn);
-        clearPacketFree(currentClearPacket);
+        printf("\n~~~~End of round~~~~~\n");
+        encoderStatePrint(*encState);
+        decoderStatePrint(*decState);
+        printf("~~~~~~~~~\n");
+        
+        //usleep(100000);
     }
     
-    // Clean
-    mFree(Ps);
-    decoderStateFree(decoderState);
-    encoderStateFree(encoderState);
+    printf("During the %d rounds, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d Data Packets has been sent, %d received ( * %d = %d).\n%d Ack has been sent, %d received.\n Loss rate = %f.\n", nRounds, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, PACKETSIZE, PACKETSIZE * totalDataPacketReceived,totalAckSent, totalAckReceived, LOSS);
     
-    for(i=0; i<CLEAR_PACKETS; i++){
-        if(isReceived[i]){
-            printf("Clear packet #%d received\n", i);
-        } else {
-            printf("Clear packet #%d lost\n", i);
-            if(LOSS == 0){
-                ret = false;
-            }
-        }
-    }
-    
-    return ret;
+    encoderStateFree(encState);
+    decoderStateFree(decState);
+    return true;
 }
 
-int main(int argc, char **argv){    
-    if(galoisTest() && matrixTest() && packetTest() && maxMinTest() && codingTest()){
+int main(int argc, char **argv){
+    if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
         printf("All test passed.\n");
         return 0;
     } else {

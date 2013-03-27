@@ -1,71 +1,34 @@
 #ifndef _PACKET_
 #define _PACKET_
-#define MAX_PAYLOAD_PRINT 20
 
-#define TYPE_DATA 1
-#define TYPE_CONTROL 2
+#include "utils.h"
 
-typedef struct payload_t {
-    int size;
-    uint8_t* data;
-} payload;
+#define FLAG_CLEAR 0b00000000
+#define FLAG_CODED 0b10000000
+#define BITMASK_NO    0b01111111
+#define BITMASK_FLAG  0b10000000
 
-typedef struct coeffs_t {
-    uint8_t n;
-    uint32_t start1; // Start sequence number
-    uint8_t* alpha;  // Coefficient for the n-th segment
-    uint16_t* start; // Starting sequence number for the 1+ packets ; relative to previous packet
-    uint16_t* size;  // Real size of the n-th segment (can be padded with zeros )
-    uint8_t* hdrSize;  // headers (IP and TCP) size in the n-th segment
-} coeffs;
+typedef struct datapacket_t {
+    uint16_t blockNo; // Block number of the packet
+    uint8_t packetNumber; // Flag (1bit) | Packet index in block (if uncoded), number of packets used for coding (if coded)
+    uint32_t seqNo; // Sequence number (always increment)
+    uint8_t* payloadAndSize; // uint16 | real payload. Note : the uint16 gets encoded when the rest of the payload is.
+    
+    int size; // Size of the array payloadAndSize. NOT TRANSMISSIBLE !
+} datapacket;
 
-typedef struct encodedpacket_t {
-    coeffs* coeffs;
-    payload* payload;
-} encodedpacket;
+typedef struct ackpacket_t {
+    uint16_t ack_currBlock; // Smallest undecoded block
+    uint8_t ack_currDof; // Degrees of freedom recovered for the current block
+    uint32_t ack_seqNo; // Sequence Number for the currently acknowledged packet
+} ackpacket;
 
-typedef struct clearpacket_t {
-    int indexStart;
-    uint8_t hdrSize;
-    payload* payload;
-} clearpacket;
+void dataPacketPrint(datapacket p);
+void dataPacketToBuffer(datapacket p, uint8_t* buffer, int* size);
+datapacket* bufferToData(uint8_t* buffer, int size);
 
-typedef struct clearpacketarray_t {
-    int nPackets;
-    clearpacket** packets;
-} clearpacketarray;
-
-typedef struct encodedpacketarray_t {
-    int nPackets;
-    encodedpacket** packets;
-} encodedpacketarray;
-
-void payloadPrint(payload p);
-
-void encodedPacketPrint(encodedpacket packet);
-
-void clearPacketPrint(clearpacket packet);
-
-clearpacket* clearPacketCreate(uint32_t index, uint16_t size, uint8_t hdrSize, uint8_t* data);
-
-void clearPacketFree(clearpacket* p);
-
-payload* payloadCreate(int size, uint8_t* data);
-
-void encodedPacketFree(encodedpacket* p);
-
-void payloadFree(payload* p);
-
-void encodedArrayFree(encodedpacketarray* a);
-
-void clearArrayFree(clearpacketarray* a);
-
-void encodedArrayAppend(encodedpacketarray* a, encodedpacket* p);
-
-void clearArrayAppend(clearpacketarray* a, clearpacket* p);
-
-void clearArrayRemove(clearpacketarray* a, int index);
-
-encodedpacket* encodedPacketCopy(encodedpacket p);
+void ackPacketPrint(ackpacket p);
+void ackPacketToBuffer(ackpacket p, uint8_t* buffer, int* size);
+ackpacket* bufferToAck(uint8_t* buffer, int size);
 
 #endif

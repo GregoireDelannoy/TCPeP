@@ -3,6 +3,8 @@
 
 #define MAX_PRINT 20 // Do not print matrices if horiz dimension exceeds it
 
+#include "utils.h"
+#include "galois_field.h"
 
 typedef struct matrix_t {
     uint8_t** data;

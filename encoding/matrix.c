@@ -18,7 +18,7 @@ matrix* mCreate(int rows, int columns){
     if(rows != 0){
         resultMatrix->data = malloc(rows * sizeof(uint8_t**));
         for(i = 0; i < resultMatrix->nRows; i++){
-            resultMatrix->data[i] = malloc(resultMatrix->nColumns * sizeof(uint8_t));
+            resultMatrix->data[i] = calloc(resultMatrix->nColumns, sizeof(uint8_t));
         }
     }
     return resultMatrix;
@@ -87,7 +87,7 @@ matrix* mMul(matrix a, matrix b){
 
     // Check dimension correctness
     if(a.nColumns != b.nRows){
-        printf("Error in Matrix dimensions. Cannot continue\n");
+        printf("mMul : Error in Matrix dimensions. Cannot continue\n");
         exit(1);
     }
 
