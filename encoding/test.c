@@ -11,7 +11,6 @@
 #include "protocol.h"
 
 
-#define PACKET_LENGTH 50
 #define CLEAR_PACKETS 10
 #define LOSS 0.05
 
@@ -88,7 +87,7 @@ int codingTest(){
     int i, j, buf1Len, buf2Len;
     muxstate mState;
     mState.sport = 10; mState.dport = 10; mState.remote_ip = 10;
-    int nRounds = 100;
+    int nRounds = CLEAR_PACKETS;
     
     matrix* randomMatrix = getRandomMatrix(1, PACKETSIZE);
     mPrint(*randomMatrix);
@@ -101,8 +100,8 @@ int codingTest(){
         decoderStatePrint(*decState);
         printf("~~~~~~~~~\n");
         
-        handleInClear(encState, buffer, PACKETSIZE - 7);
-        totalBytesReceived += PACKETSIZE - 7;
+        handleInClear(encState, buffer, PACKETSIZE);
+        totalBytesReceived += PACKETSIZE;
 
         // Send ACKs
         for(j = 0; j < decState->nAckToSend; j++){

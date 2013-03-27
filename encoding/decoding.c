@@ -15,8 +15,6 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     uint8_t* coeffVector;
     uint8_t ackBuffer[100];
     
-    // Compute coefficients
-    coeffs = mCreate(1, BLKSIZE);
     printf("p->packetNumber = %2x\n", packet->packetNumber);
     
     // ~~ Allocate blocks & coefficient matrix if necessary ~~
@@ -40,7 +38,9 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     }
     
     if(packet->blockNo >= state->currBlock){
-        if((packet->packetNumber & BITMASK_NO) > state->nPacketsInBlock[packet->blockNo - state->currBlock]){ // Try to append
+        if((packet->packetNumber & BITMASK_NO) >= state->nPacketsInBlock[packet->blockNo - state->currBlock]){ // Try to append
+            // Compute coefficients
+            coeffs = mCreate(1, BLKSIZE);
             dataVector = calloc(PACKETSIZE, sizeof(uint8_t));
             coeffVector = calloc(BLKSIZE, sizeof(uint8_t));
             if(((packet->packetNumber) & BITMASK_FLAG) ==  FLAG_CLEAR){

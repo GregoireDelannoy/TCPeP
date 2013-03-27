@@ -183,8 +183,10 @@ int main(int argc, char *argv[]) {
         timeOut.tv_sec = currentTime.tv_sec + 10000000;
         timeOut.tv_usec = 0;
         for(i = 0; i<muxTableLength;i++){
-            FD_SET((*muxTable)[i].sock_fd, &rd_set);
-            maxfd = max(maxfd, (*muxTable)[i].sock_fd);
+            if(!((*muxTable)[i].closeAwaiting)){
+                FD_SET((*muxTable)[i].sock_fd, &rd_set);
+                maxfd = max(maxfd, (*muxTable)[i].sock_fd);
+            }
             
             // Get the first to timeout
             if(isSooner((*muxTable)[i].encoderState->nextTimeout, timeOut)){
@@ -306,11 +308,9 @@ int main(int argc, char *argv[]) {
         for(i = 0; i<muxTableLength;i++){
             if(FD_ISSET((*muxTable)[i].sock_fd, &rd_set)){
                 if((nread = cread((*muxTable)[i].sock_fd, buffer, BUFSIZE)) <= 0){
-                    printf("Mux #%d is closing\n", i);
+                    printf("Mux #%d is flagged for closing\n", i);
                     close((*muxTable)[i].sock_fd);
-                    bufferToMuxed(buffer, tmp, 0, &dstLen, (*muxTable)[i], TYPE_CLOSE);
-                    udpSend(udpSock_fd, tmp, dstLen, (struct sockaddr*)&remote);
-                    removeMux(i, muxTable, &muxTableLength);
+                    (*muxTable)[i].closeAwaiting = true;
                 } else {
                     printf("Mux #%d has received %d bytes from the TCP socket\n", i, nread);
                     // Pass it to the encoder
@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
             }
             
             // Send ACKs
-            for(j = (*muxTable)[i].decoderState->nAckToSend - 1; j >= 0; j--){
+            for(j = 0; j < (*muxTable)[i].decoderState->nAckToSend; j++){
                 bufferToMuxed((*muxTable)[i].decoderState->ackToSend[j], buffer, (*muxTable)[i].decoderState->ackToSendSize[j], &dstLen, (*muxTable)[i], TYPE_ACK);
                 nwrite = udpSend(udpSock_fd, buffer, dstLen, (struct sockaddr*)&remote);
                 printf("Sent a %d bytes ACK\n", nwrite);
@@ -341,14 +341,16 @@ int main(int argc, char *argv[]) {
             for(j = 0; j< (*muxTable)[i].decoderState->nAckToSend;j++){
                 free((*muxTable)[i].decoderState->ackToSend[j]);
             }
-            free((*muxTable)[i].decoderState->ackToSend);
-            (*muxTable)[i].decoderState->ackToSend = 0;
-            free((*muxTable)[i].decoderState->ackToSendSize);
-            (*muxTable)[i].decoderState->ackToSendSize = 0;
-            (*muxTable)[i].decoderState->nAckToSend = 0;
+            if((*muxTable)[i].decoderState->nAckToSend > 0){
+                free((*muxTable)[i].decoderState->ackToSend);
+                (*muxTable)[i].decoderState->ackToSend = 0;
+                free((*muxTable)[i].decoderState->ackToSendSize);
+                (*muxTable)[i].decoderState->ackToSendSize = 0;
+                (*muxTable)[i].decoderState->nAckToSend = 0;
+            }
             
             // Send coded data packets from the encoder
-            for(j = (*muxTable)[i].encoderState->nDataToSend - 1; j >= 0; j--){
+            for(j = 0; j < (*muxTable)[i].encoderState->nDataToSend; j++){
                 bufferToMuxed((*muxTable)[i].encoderState->dataToSend[j], buffer, (*muxTable)[i].encoderState->dataToSendSize[j], &dstLen, (*muxTable)[i], TYPE_DATA);
                 nwrite = udpSend(udpSock_fd, buffer, dstLen, (struct sockaddr*)&remote);
                 printf("Sent a %d bytes DATA packet\n", nwrite);
@@ -357,11 +359,21 @@ int main(int argc, char *argv[]) {
             for(j = 0; j< (*muxTable)[i].encoderState->nDataToSend;j++){
                 free((*muxTable)[i].encoderState->dataToSend[j]);
             }
-            free((*muxTable)[i].encoderState->dataToSend);
-            (*muxTable)[i].encoderState->dataToSend = 0;
-            free((*muxTable)[i].encoderState->dataToSendSize);
-            (*muxTable)[i].encoderState->dataToSendSize = 0;
-            (*muxTable)[i].encoderState->nDataToSend = 0;
+            if((*muxTable)[i].encoderState->nDataToSend > 0){
+                free((*muxTable)[i].encoderState->dataToSend);
+                (*muxTable)[i].encoderState->dataToSend = 0;
+                free((*muxTable)[i].encoderState->dataToSendSize);
+                (*muxTable)[i].encoderState->dataToSendSize = 0;
+                (*muxTable)[i].encoderState->nDataToSend = 0;
+            }
+            
+            if((*muxTable)[i].closeAwaiting && !((*muxTable)[i].encoderState->isOutstandingData)){
+                printf("Closing Mux %d\n", i);
+                bufferToMuxed(buffer, tmp, 0, &dstLen, (*muxTable)[i], TYPE_CLOSE);
+                udpSend(udpSock_fd, tmp, dstLen, (struct sockaddr*)&remote);
+                removeMux(i, muxTable, &muxTableLength);
+                i--; // Go back in the for loop, because of the sliding induced by removeMux();
+            }
         }
     }
     

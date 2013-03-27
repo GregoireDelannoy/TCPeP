@@ -4,9 +4,6 @@
 #include "packet.h"
 #include "matrix.h"
 
-#define BLKSIZE 3 // Block size (in number of packets)
-#define PACKETSIZE 10 // Maximum payload size (in bytes)
-
 typedef struct decoderstate_t {
     matrix** blocks;
     matrix** coefficients;

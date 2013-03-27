@@ -21,6 +21,8 @@ typedef struct muxstate_t {
     
     encoderstate* encoderState;
     decoderstate* decoderState;
+    
+    int closeAwaiting;
 } muxstate;
 
 int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, int sock_fd, muxstate** statesTable, int* tableLength);

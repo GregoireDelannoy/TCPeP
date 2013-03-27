@@ -25,6 +25,9 @@ void onWindowUpdate(encoderstate* state){
     printf("Current Time : (%d,%d)\n", (int)currentTime.tv_sec, (int)currentTime.tv_usec);
     for(i = state->seqNo_Una; i < state->seqNo_Next; i++){
         timeOfArrival = sentAtTime(*(state->packetSentInfos), *(state->nPacketSent), i);
+        if(timeOfArrival.tv_sec == 0){
+            continue;
+        }
         printf("Computing values for packet #%u sent at (%d,%d). RTT = %ld\n", i, (int)timeOfArrival.tv_sec, (int)timeOfArrival.tv_usec, state->RTT);
         
         printf("Before : tOA = (%ld, %ld)\n", timeOfArrival.tv_sec, timeOfArrival.tv_usec);
@@ -55,7 +58,7 @@ void onWindowUpdate(encoderstate* state){
     while((totalInFlight < floor(state->congestionWindow)) && (sentInThisRound)){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
-            if(( i == 0) && (((1 - state->p) * nPacketsInFlight[i]) < (state->blocks[i].nPackets - state->currDof ))){
+            if(( i == 0) && (((1 - state->p) * nPacketsInFlight[i]) < (state->blocks[i].nPackets - state->currDof))){
                 // ~~ Send from the first block ~~
                 printf("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
                 sendFromBlock(state, i);
@@ -73,6 +76,10 @@ void onWindowUpdate(encoderstate* state){
                 break;
             }
         }
+        if(totalInFlight == 0){
+            printf("All available data has been transfered to the other side\n");
+            state->isOutstandingData = false;
+        }
     }
     
     free(nPacketsInFlight);
@@ -84,7 +91,7 @@ void handleInClear(encoderstate* state, uint8_t* buffer, int size){
     int sizeAllocated = 0, i;
     uint16_t currentWriteSize, tmp16;
     while(sizeAllocated < size){
-        for(i = 0; i<state->numBlock && sizeAllocated < size; i++){ // Look in already allocated blocks
+        for(i = 0; (i < state->numBlock) && (sizeAllocated < size); i++){ // Look in already allocated blocks
             if(state->blocks[i].nPackets < BLKSIZE){
                 currentWriteSize = min(PACKETSIZE - 2, size - sizeAllocated);
                 tmp16 = htons(currentWriteSize); // Write the size on a uint16.
@@ -94,7 +101,7 @@ void handleInClear(encoderstate* state, uint8_t* buffer, int size){
                 sizeAllocated += currentWriteSize;
                 state->blocks[i].nPackets ++;
                 printf("Appended %d bytes in the block #%d which now contains %d packets\n", currentWriteSize, i, state->blocks[i].nPackets);
-                i = 0;
+                i = -1;
             }
         }
         
@@ -104,6 +111,8 @@ void handleInClear(encoderstate* state, uint8_t* buffer, int size){
             state->numBlock++;
         }
     }
+    
+    state->isOutstandingData = true;
     
     onWindowUpdate(state);
 }
@@ -116,6 +125,8 @@ void onTimeOut(encoderstate* state){
     // ~~ Set time for the next timeOut event ~~
     gettimeofday(&(state->nextTimeout), NULL);
     addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->RTT);
+    
+    onWindowUpdate(state);
 }
 
 void onAck(encoderstate* state, uint8_t* buffer, int size){
@@ -136,7 +147,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     struct timeval sentAt = sentAtTime(*(state->packetSentInfos), *(state->nPacketSent), ack->ack_seqNo);
     if(sentAt.tv_sec == 0){
         // The specified sequence number is unknown... better to ignore this ACK !
-        printf("Unknown sequence number, do not refresh parameters !\n");
+        printf("Unknown/outdated sequence number, do not refresh parameters !\n");
         free(ack);
         return;
     }
@@ -194,10 +205,10 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     } else { // Congestion avoidance mode
         if(ack->ack_seqNo > state->seqNo_Una){
             printf("Multiplicative backoff with RTT = %lu & RTTmin = %lu\n", state->RTT, state->RTTmin);
-            // Arbitrary rule : do NEVER shrink the window by more than 3/4
-            state->congestionWindow = (max(0.75, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
+            // Arbitrary rule : do NEVER shrink the window by more than 2/3
+            state->congestionWindow = (max(0.66, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
         } else {
-            state->congestionWindow = state->congestionWindow + 1 + (1 / state->congestionWindow);
+            state->congestionWindow = state->congestionWindow + (1 / state->congestionWindow);
         }
         
         // Arbitrary rule, not from MIT's algos : congestion Win >= SS_THRESHOLD when in cong avoidance mode :
@@ -241,6 +252,7 @@ encoderstate* encoderStateInit(){
     ret->time_lastAck.tv_usec = 0;
     ret->nextTimeout.tv_sec = 0;
     ret->nextTimeout.tv_usec = 0;
+    ret->isOutstandingData = false;
     
     return ret;
 }

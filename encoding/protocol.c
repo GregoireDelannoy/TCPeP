@@ -21,6 +21,7 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, int sock_fd, m
     (*statesTable)[(*tableLength) - 1].sock_fd = sock_fd;
     (*statesTable)[(*tableLength) - 1].encoderState = encoderStateInit();
     (*statesTable)[(*tableLength) - 1].decoderState = decoderStateInit();
+    (*statesTable)[(*tableLength) - 1].closeAwaiting = false;
     
     return (*tableLength) - 1;
 }
