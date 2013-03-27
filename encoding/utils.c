@@ -84,12 +84,6 @@ int isSooner(struct timeval a, struct timeval b){
         ret = true;
     }
     
-    if(ret){
-        printf("in isSooner : (%d,%d) is sooner than (%d,%d)\n", (int)a.tv_sec, (int)a.tv_usec, (int)b.tv_sec, (int)b.tv_usec);
-    } else {
-        printf("in isSooner : (%d,%d) is later than (%d,%d)\n", (int)a.tv_sec, (int)a.tv_usec, (int)b.tv_sec, (int)b.tv_usec);
-    }
-    
     return ret;
 }
 

@@ -6,20 +6,19 @@ void extractData(decoderstate* state);
 int isZeroAndOneAt(uint8_t* vector, int index, int size);
 
 void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
-    printf("in handleInCoded\n");
+    do_debug("in handleInCoded\n");
     datapacket* packet = bufferToData(buffer, size);
-    dataPacketPrint(*packet);
     matrix *coeffs, *tmp;
     int bufLen, i;
     uint8_t* dataVector;
     uint8_t* coeffVector;
     uint8_t ackBuffer[100];
     
-    printf("p->packetNumber = %2x\n", packet->packetNumber);
+    do_debug("p->packetNumber = %2x\n", packet->packetNumber);
     
     // ~~ Allocate blocks & coefficient matrix if necessary ~~
     while(state->currBlock + state->numBlock - 1 < packet->blockNo){
-        printf("CurrBlock = %d, numBlock = %d, blockNo of received Data = %d\n", state->currBlock, state->numBlock, packet->blockNo);
+        do_debug("CurrBlock = %d, numBlock = %d, blockNo of received Data = %d\n", state->currBlock, state->numBlock, packet->blockNo);
         state->blocks = realloc(state->blocks, (state->numBlock + 1) * sizeof(matrix*));
         state->blocks[state->numBlock] = mCreate(BLKSIZE, PACKETSIZE);
         state->coefficients = realloc(state->coefficients, (state->numBlock + 1) * sizeof(matrix*));
@@ -55,9 +54,6 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
                 exit(1);
             }
             
-            printf("Computed coefficient matrix for received packet : \n");
-            mPrint(*coeffs);
-            
             // ~~ Append to the matrix and eventually decode ~~
             memcpy(dataVector, packet->payloadAndSize, packet->size);
             memcpy(coeffVector, coeffs->data[0], BLKSIZE);
@@ -65,18 +61,18 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
             mFree(coeffs);
             
             if(appendCodedPayload(state, coeffVector, dataVector, packet->blockNo - state->currBlock)){
-                printf("Received an innovative packet\n");
+                do_debug("Received an innovative packet\n");
             } else {
-                printf("Received packet was not innovative. Drop.\n");
+                do_debug("Received packet was not innovative. Drop.\n");
             }
             
             free(dataVector);
             free(coeffVector);
         } else {
-            printf("Received packet has NO chance to be innovative. Drop.\n");
+            do_debug("Received packet has NO chance to be innovative. Drop.\n");
         }
     } else {
-        printf("Packet received for an outdated block. Drop.\n");
+        do_debug("Packet received for an outdated block. Drop.\n");
     }
     
     // ~~ Try to decode ~~
@@ -93,7 +89,6 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     } else {
         ack.ack_currDof = 0;
     }
-    ackPacketPrint(ack);
     
     ackPacketToBuffer(ack, ackBuffer, &bufLen);
     
@@ -161,7 +156,7 @@ void decoderStateFree(decoderstate* state){
 }
 
 int appendCodedPayload(decoderstate* state, uint8_t* coeffsVector, uint8_t* dataVector, int blockNo){
-    printf("in appendCodedPayload\n");
+    do_debug("in appendCodedPayload\n");
     int i, index, isEmpty = true;
     uint8_t factor;
     // Index = index of the first non-zero element
@@ -187,14 +182,12 @@ int appendCodedPayload(decoderstate* state, uint8_t* coeffsVector, uint8_t* data
         rowReduce(coeffsVector, factor, BLKSIZE);
         rowReduce(dataVector, factor, PACKETSIZE);
         memcpy(state->blocks[blockNo]->data[index], dataVector, PACKETSIZE);
-        mPrint(*(state->blocks[blockNo]));
         memcpy(state->coefficients[blockNo]->data[index], coeffsVector, BLKSIZE);
         state->nPacketsInBlock[blockNo] ++;
         return true;
     } else {
         // Try to eliminate
         factor = coeffsVector[index];
-        mPrint(*(state->coefficients[blockNo]));
         rowMulSub(coeffsVector, state->coefficients[blockNo]->data[index], factor, BLKSIZE);
         rowMulSub(dataVector, state->blocks[blockNo]->data[index], factor, PACKETSIZE);
         
@@ -219,15 +212,8 @@ int isZeroAndOneAt(uint8_t* vector, int index, int size){
 }
 
 void extractData(decoderstate* state){
-    printf("in extractData\n");
+    do_debug("in extractData\n");
     // We only try to extract data on current block.
-    
-    //DEBUG :
-    printf("CoeffMatrix : \n");
-    mPrint(*(state->coefficients[0]));
-    printf("dataMatrix : \n");
-    mPrint(*(state->blocks[0]));
-    
     
     int nPackets = state->nPacketsInBlock[0], i, firstNonDecoded = -1;
     uint8_t factor;
@@ -239,7 +225,7 @@ void extractData(decoderstate* state){
         if((isZeroAndOneAt(state->coefficients[0]->data[i], i, BLKSIZE)) && !(state->isSentPacketInBlock[0][i])){
                 memcpy(&size, state->blocks[0]->data[i], 2);
                 size = ntohs(size);
-                printf("Got a new decoded packet of size %u to send to the application ! o/\n", size);
+                do_debug("Got a new decoded packet of size %u to send to the application ! o/\n", size);
                 
                 // Append to the sending buffer
                 state->dataToSend = realloc(state->dataToSend, (state->nDataToSend + size) * sizeof(uint8_t));
@@ -254,12 +240,12 @@ void extractData(decoderstate* state){
         }
     }
     
-    printf("FirstNonDecoded = %d\n", firstNonDecoded);
+    do_debug("FirstNonDecoded = %d\n", firstNonDecoded);
     
     if(firstNonDecoded == -1){
         if((nPackets == BLKSIZE) && (state->isSentPacketInBlock[0][BLKSIZE - 1])){
             // The entire block has been decoded AND sent 
-            printf("An entire block has been decoded and sent, switch to next block.\n");
+            do_debug("An entire block has been decoded and sent, switch to next block.\n");
             
             mFree(state->blocks[0]);
             mFree(state->coefficients[0]);
@@ -280,7 +266,7 @@ void extractData(decoderstate* state){
             state->nPacketsInBlock = realloc(state->nPacketsInBlock, state->numBlock * sizeof(int));
         }
         
-        printf("Nothing new decoded this round.\n");
+        do_debug("Nothing new decoded this round.\n");
         return;
     }
     
@@ -295,7 +281,7 @@ void extractData(decoderstate* state){
     
     if(isZeroAndOneAt(state->coefficients[0]->data[firstNonDecoded], firstNonDecoded, BLKSIZE)){
         // We decoded something => call recursively, in case there's something else waiting, or we finished the block
-        printf("Something got decoded\n");
+        do_debug("Something got decoded\n");
         extractData(state);
     }
 }
