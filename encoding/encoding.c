@@ -51,8 +51,8 @@ void onWindowUpdate(encoderstate* state){
     
     
     // ~~ If we're allowed to send, find a block that would be worth it ~~
-    do_debug("Before for statement, totalInFlight = %d, congWin = %f , floor-ed = %d\n", totalInFlight, state->congestionWindow, (int)floor(state->congestionWindow));
-    while((totalInFlight < floor(state->congestionWindow)) && (sentInThisRound)){
+    do_debug("Before for statement, totalInFlight = %d, congWin = %u\n", totalInFlight, state->congestionWindow);
+    while((totalInFlight < state->congestionWindow) && (sentInThisRound)){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
             do_debug("Block %d should receive ~%f packets\n", i, (1 - state->p) * nPacketsInFlight[i]);
@@ -132,7 +132,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     ackpacket* ack = bufferToAck(buffer, size);
     int losses, i, currentRTT;
     
-    // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Do not treat it
+    // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Do not consider it
     if(ack->ack_seqNo < state->seqNo_Una){
         printf("Outdated ACK, Drop !\n");
         free(ack);
@@ -166,7 +166,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     
     if(losses == 0){
         // 2 fpo
-        state->p = state->p * (1.0 - 5 * SMOOTHING_FACTOR);
+        state->p = state->p * (1.0 - 3 * SMOOTHING_FACTOR);
         
         // Arbitrary idea : If there's no losses, reconciliate RTT & RTTmin.
         //3.5fpo
@@ -188,6 +188,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
             uint32_t seqNo = (*(state->packetSentInfos))[i].seqNo;
             if(sentBlock(*(state->packetSentInfos), *(state->nPacketSent), seqNo) == state->currBlock){
                 removeFromPacketSentInfos(state->packetSentInfos, state->nPacketSent, seqNo);
+                i--;
             }
         }
         state->currBlock++;
@@ -197,30 +198,33 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     state->currDof = max(state->currDof, ack->ack_currDof);
     
     // ~~ Update Congestion window ~~
-    do_debug("Congestion Window before actualizing = %f\n", state->congestionWindow);
+    do_debug("Congestion Window before actualizing = %u\n", state->congestionWindow);
     if(state->slowStartMode){
-        state->congestionWindow += 1.0;
+        state->congestionWindow += 1;
         if(state->congestionWindow > SS_THRESHOLD){
             state->slowStartMode = false;
         }
     } else { // Congestion avoidance mode
-        if(ack->ack_seqNo > state->seqNo_Una){
+        if(losses == 0){
+            // Arbitrary idea : additive increase
+            state->congestionWindow = 3 + state->congestionWindow;
+            //state->congestionWindow = state->congestionWindow + 10 + (1 / state->congestionWindow);
+        } else {
             do_debug("Multiplicative backoff with RTT = %lu & RTTmin = %lu\n", state->RTT, state->RTTmin);
             // Arbitrary rule : do NEVER shrink the window by more than 2/3
             state->congestionWindow = (max(0.66, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
-        } else {
-            state->congestionWindow = state->congestionWindow + (1 / state->congestionWindow);
         }
         
         // Arbitrary rule, not from MIT's algos : congestion Win >= SS_THRESHOLD when in cong avoidance mode :
         state->congestionWindow = max(state->congestionWindow, SS_THRESHOLD);
     }
-    do_debug("Congestion Window after actualizing = %f\n", state->congestionWindow);
+    do_debug("Congestion Window after actualizing = %u\n", state->congestionWindow);
     
     state->seqNo_Una = max(state->seqNo_Una, ack->ack_seqNo + 1);
     
     // ~~ Set time for the next timeOut event ~~
-    gettimeofday(&(state->nextTimeout), NULL);
+    state->nextTimeout.tv_sec = state->time_lastAck.tv_sec;
+    state->nextTimeout.tv_usec = state->time_lastAck.tv_usec;
     addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->RTT);
         
     free(ack);
@@ -449,7 +453,7 @@ void encoderStatePrint(encoderstate state){
     printf("\tNumber of blocks = %d\n", state.numBlock);
     printf("\tEncoded data to send = %d\n", state.nDataToSend);
     printf("\tCurrent Degrees of Freedom = %u\n", state.currDof);
-    printf("\tCongestion window = %f\n", state.congestionWindow);
+    printf("\tCongestion window = %u\n", state.congestionWindow);
     printf("\tRTT = %ld\n", state.RTT);
     printf("\tRTT min = %ld\n", state.RTTmin);
     printf("\tLoss estimation = %f\n", state.p);

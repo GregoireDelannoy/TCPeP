@@ -12,7 +12,7 @@
 
 
 #define CLEAR_PACKETS 20000
-#define LOSS 0.2
+#define LOSS 0.05
 
 
 int galoisTest(){
