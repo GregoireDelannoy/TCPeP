@@ -43,11 +43,25 @@ int galoisTest(){
 
 int matrixTest(){
     int isOk = true;
-    matrix* a, *b, *identity, *result;
+    matrix* a, *b, *identity, *result, *result1;
     
     // Create & Destroy Matrices
     a = getRandomMatrix(1000,1000);
     b = getRandomMatrix(1000,1000);
+    result = mMul(*a, *b);
+    result1 = mMul1(*a, *b);
+    
+    if(!mEqual(*result, *result1)){
+        printf("Mult algos are different !\n");
+        mPrint(*a);
+        mPrint(*b);
+        mPrint(*result);
+        mPrint(*result1);
+        isOk = false;
+    }
+    
+    mFree(result);
+    mFree(result1);
     mFree(a);
     mFree(b);
     
@@ -57,6 +71,16 @@ int matrixTest(){
     identity = getIdentityMatrix(4);
     b = mGauss(*a);
     result = mMul(*a, *b);
+    result1 = mMul1(*a, *b);
+    
+    if(!mEqual(*result, *result1)){
+        printf("Mult algos are different !\n");
+        mPrint(*a);
+        mPrint(*b);
+        mPrint(*result);
+        mPrint(*result1);
+        isOk = false;
+    }
     
     if(!mEqual(*identity, *result)){
         printf("matrix gauss or multiplication failed\n");
@@ -174,8 +198,38 @@ int codingTest(){
     return true;
 }
 
+int codingPerf(){
+    matrix *a = getRandomMatrix(100,10000), *b = getRandomMatrix(10000,100), *result;
+    int i, nbRounds = 10;
+    struct timeval startTime, endTime;
+    
+    printf("Normal algo : ");
+    gettimeofday(&startTime, NULL);
+    for(i = 0; i < nbRounds; i++){
+        result = mMul1(*a, *b);
+        mFree(result);
+    }
+    gettimeofday(&endTime, NULL);
+    printf(" %lu\n", (1000000 * (endTime.tv_sec - startTime.tv_sec)) + (endTime.tv_usec - startTime.tv_usec));
+    
+    printf("Memory Wise : ");
+    gettimeofday(&startTime, NULL);
+    for(i = 0; i < nbRounds; i++){
+        result = mMul(*a, *b);
+        mFree(result);
+    }
+    gettimeofday(&endTime, NULL);
+    printf(" %lu\n", (1000000 * (endTime.tv_sec - startTime.tv_sec)) + (endTime.tv_usec - startTime.tv_usec));
+    
+    
+    mFree(a);
+    mFree(b);
+    return true; 
+}
+
 int main(int argc, char **argv){
-    if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
+    if(matrixTest() && codingPerf()){
+    //if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
         printf("All test passed.\n");
         return 0;
     } else {

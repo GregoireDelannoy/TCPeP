@@ -24,6 +24,7 @@ void mPrint(matrix m);
 void mFree(matrix* m);
 
 matrix* mMul(matrix a, matrix b);
+matrix* mMul1(matrix a, matrix b);
 
 matrix* mCopy(matrix orig);
 

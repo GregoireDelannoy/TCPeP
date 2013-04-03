@@ -80,7 +80,8 @@ void mFree(matrix* m){
     free(m);
 }
 
-matrix* mMul(matrix a, matrix b){
+// mMul standard
+matrix* mMul1(matrix a, matrix b){
     int i, j, k;
     matrix* resultMatrix;
     uint8_t tmp;
@@ -104,6 +105,38 @@ matrix* mMul(matrix a, matrix b){
     }
     return resultMatrix;
 }
+
+// mMul memory-wise
+matrix* mMul(matrix a, matrix b){
+    int i, j, k;
+    matrix* resultMatrix;
+    uint8_t factor;
+    uint8_t *aVector, *bVector, *resVector;
+
+    // Check dimension correctness
+    if(a.nColumns != b.nRows){
+        printf("mMul : Error in Matrix dimensions. Cannot continue\n");
+        exit(1);
+    }
+
+    resultMatrix = mCreate(a.nRows, b.nColumns);
+
+    for(i = 0; i < resultMatrix->nRows; i++){
+        aVector = a.data[i];
+        resVector = resultMatrix->data[i];
+        for(j = 0; j < resultMatrix->nColumns; j++){
+            factor = aVector[j];
+            if(factor != 0x00){
+                bVector = b.data[j];
+                for(k = 0; k < b.nColumns; k++){
+                    resVector[k] = gadd(resVector[k], gmul(factor, bVector[k]));
+                } 
+            }
+        }
+    }
+    return resultMatrix;
+}
+
 
 matrix* mCopy(matrix orig){
     int i;
