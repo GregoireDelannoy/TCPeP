@@ -11,7 +11,7 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 1000
+#define CLEAR_PACKETS 20000
 #define LOSS 0.2
 
 
@@ -48,20 +48,6 @@ int matrixTest(){
     // Create & Destroy Matrices
     a = getRandomMatrix(1000,1000);
     b = getRandomMatrix(1000,1000);
-    result = mMul(*a, *b);
-    result1 = mMul1(*a, *b);
-    
-    if(!mEqual(*result, *result1)){
-        printf("Mult algos are different !\n");
-        mPrint(*a);
-        mPrint(*b);
-        mPrint(*result);
-        mPrint(*result1);
-        isOk = false;
-    }
-    
-    mFree(result);
-    mFree(result1);
     mFree(a);
     mFree(b);
     
@@ -87,7 +73,7 @@ int matrixTest(){
         isOk = false;
     }
     
-    mFree(a);mFree(b);mFree(identity);mFree(result);
+    mFree(a);mFree(b);mFree(identity);mFree(result);mFree(result1);
     
     mFree(mCreate(0,0));
     
@@ -188,7 +174,7 @@ int codingTest(){
         //decoderStatePrint(*decState);
         //printf("~~~~~~~~~\n");
         
-        usleep((1.0 * random() /RAND_MAX) * 10000);
+        //usleep((1.0 * random() /RAND_MAX) * 10000);
     }
     
     printf("During the %d rounds, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d bytes of Data Packets has been sent, %d received.\n%d Ack has been sent, %d received.\n Loss rate = %f. Transmission efficiency = %f\n", nRounds, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, totalAckSent, totalAckReceived, LOSS, 1.0 * totalBytesSent / totalDataPacketReceived);
@@ -199,7 +185,7 @@ int codingTest(){
 }
 
 int codingPerf(){
-    matrix *a = getRandomMatrix(100,10000), *b = getRandomMatrix(10000,100), *result;
+    matrix *a = getRandomMatrix(100,1000), *b = getRandomMatrix(1000,100), *result;
     int i, nbRounds = 10;
     struct timeval startTime, endTime;
     
@@ -228,8 +214,8 @@ int codingPerf(){
 }
 
 int main(int argc, char **argv){
-    if(matrixTest() && codingPerf()){
-    //if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
+    //if(matrixTest() && codingPerf()){
+    if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
         printf("All test passed.\n");
         return 0;
     } else {

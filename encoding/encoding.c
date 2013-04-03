@@ -55,10 +55,10 @@ void onWindowUpdate(encoderstate* state){
     while((totalInFlight < floor(state->congestionWindow)) && (sentInThisRound)){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
-            printf("Block %d should receive ~%f packets\n", i, (1 - state->p) * nPacketsInFlight[i]);
+            do_debug("Block %d should receive ~%f packets\n", i, (1 - state->p) * nPacketsInFlight[i]);
             if(( i == 0) && (roundf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
                 // ~~ Send from the first block ~~
-                printf("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
+                do_debug("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
@@ -66,7 +66,7 @@ void onWindowUpdate(encoderstate* state){
                 break;
             } else if((i != 0) && ((1 - state->p) * nPacketsInFlight[i]) < state->blocks[i].nPackets){
                 // ~~ Send from the i-th block ~~
-                printf("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
+                do_debug("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
@@ -152,7 +152,8 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     currentRTT = 1000000 * (state->time_lastAck.tv_sec - sentAt.tv_sec) + (state->time_lastAck.tv_usec - sentAt.tv_usec);
     do_debug("RTT for current ACK = %d\n", currentRTT);
     
-    state->RTT = floor(((1 - SMOOTHING_FACTOR) * state->RTT) + (SMOOTHING_FACTOR * currentRTT));
+    // 1 fpo
+    state->RTT = ((1 - SMOOTHING_FACTOR) * state->RTT) + (SMOOTHING_FACTOR * currentRTT);
     
     if(state->RTTmin != 0){
         state->RTTmin = min(state->RTTmin, state->RTT);
@@ -160,20 +161,18 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
         state->RTTmin = 10 * currentRTT;   // On start, RTTmin = 0 => Set it to the first RTT value encountered
     }
     
-    if(ack->ack_seqNo >= state->seqNo_Una){
-        losses = ack->ack_seqNo - state->seqNo_Una;
-        printf("%d losses, p = %f\n", losses, state->p);
-        
-        if(losses == 0){
-            state->p = state->p * (1.0 - 5 * SMOOTHING_FACTOR);
-        } else {
-            state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
-        }
+    losses = ack->ack_seqNo - state->seqNo_Una;
+    do_debug("%d losses, p = %f\n", losses, state->p);
+    
+    if(losses == 0){
+        // 2 fpo
+        state->p = state->p * (1.0 - 5 * SMOOTHING_FACTOR);
         
         // Arbitrary idea : If there's no losses, reconciliate RTT & RTTmin.
-        if(losses == 0){
-            state->RTTmin = floor(((1 - SMOOTHING_FACTOR) * state->RTTmin) + (SMOOTHING_FACTOR * state->RTT));
-        }
+        //3.5fpo
+        state->RTTmin = floor(((1 - SMOOTHING_FACTOR) * state->RTTmin) + (SMOOTHING_FACTOR * state->RTT));
+    } else {
+        state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
     }
     
     // ~~ Adjust current block ~~
@@ -225,7 +224,6 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->RTT);
         
     free(ack);
-    
     onWindowUpdate(state);
 }
 

@@ -124,7 +124,7 @@ matrix* mMul(matrix a, matrix b){
     for(i = 0; i < resultMatrix->nRows; i++){
         aVector = a.data[i];
         resVector = resultMatrix->data[i];
-        for(j = 0; j < resultMatrix->nColumns; j++){
+        for(j = 0; j < a.nColumns; j++){
             factor = aVector[j];
             if(factor != 0x00){
                 bVector = b.data[j];

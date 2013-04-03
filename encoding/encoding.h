@@ -4,12 +4,12 @@
 #include "packet.h"
 #include "matrix.h"
 
-#define BASE_WINDOW 8.0 // Number of tokens to start with
-#define SS_THRESHOLD 16 // Slow start threshold
+#define BASE_WINDOW 16.0 // Number of tokens to start with
+#define SS_THRESHOLD 32 // Slow start threshold
 #define SMOOTHING_FACTOR 0.01 // Smoothing factor
-#define TIMEOUT_FACTOR 30 // Timeout = factor * rtt
-#define INFLIGHT_FACTOR 5 // Gamma from the papers
-#define COMPUTING_DELAY  20000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
+#define TIMEOUT_FACTOR 10 // Timeout = factor * rtt
+#define INFLIGHT_FACTOR 2 // Gamma from the papers
+#define COMPUTING_DELAY  5000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
 
 typedef struct packetsentinfo_t{
     uint32_t seqNo;
