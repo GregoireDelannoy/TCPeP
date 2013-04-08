@@ -1,5 +1,6 @@
 #!/bin/sh
 
-ifconfig tun0 192.168.13.2 pointopoint 192.168.13.1
+iptables -t nat -A OUTPUT -j REDIRECT --dest "10.0.0.1" -p tcp --to-ports 1337
+ip route add 10.0.0.1 via 192.168.56.1
 
-ip route add default via 192.168.13.1
+tc qdisc replace dev eth0 root netem delay 20ms loss 5%

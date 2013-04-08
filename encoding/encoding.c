@@ -14,7 +14,12 @@ void sendFromBlock(encoderstate* state, int blockNo);
 void generateEncodedPayload(matrix data, int nPackets, uint32_t seed, uint8_t* buffer, int* bufLen);
 
 void onWindowUpdate(encoderstate* state){
-    do_debug("in onWindowUpdate\n");
+    //printf("in onWindowUpdate\n");
+    if(!state->isOutstandingData){
+        printf("No outstanding data. Return\n");
+        return;
+    }
+    
     int sentInThisRound = true, totalInFlight = 0, i;
     int* nPacketsInFlight = calloc(state->numBlock, sizeof(int));
     struct timeval timeOfArrival, currentTime;
@@ -22,7 +27,7 @@ void onWindowUpdate(encoderstate* state){
     
     // ~~ Count packets in flight (total, and for each block) ~~
     gettimeofday(&currentTime, NULL);
-    do_debug("Current Time : (%d,%d)\n", (int)currentTime.tv_sec, (int)currentTime.tv_usec);
+    //do_debug("Current Time : (%d,%d)\n", (int)currentTime.tv_sec, (int)currentTime.tv_usec);
     for(i = state->seqNo_Una; i < state->seqNo_Next; i++){
         timeOfArrival = sentAtTime(*(state->packetSentInfos), *(state->nPacketSent), i);
         if(timeOfArrival.tv_sec == 0){
@@ -36,7 +41,7 @@ void onWindowUpdate(encoderstate* state){
         }
         
         if(isSooner(currentTime, timeOfArrival)){ // All packets
-            do_debug("Packet might still be in flight\n");
+            //printf("Packet #%d might still be in flight\n", i);
             sentBlockNumber = sentBlock(*(state->packetSentInfos), *(state->nPacketSent), i);
             
             if(sentBlockNumber - state->currBlock >= 0){
@@ -51,22 +56,22 @@ void onWindowUpdate(encoderstate* state){
     
     
     // ~~ If we're allowed to send, find a block that would be worth it ~~
-    do_debug("Before for statement, totalInFlight = %d, congWin = %u\n", totalInFlight, state->congestionWindow);
-    while((totalInFlight < state->congestionWindow) && (sentInThisRound)){
+    //printf("\nBefore while statement, totalInFlight = %d, congWin = %f\n", totalInFlight, state->congestionWindow);
+    while((totalInFlight < ((int)state->congestionWindow)) && (sentInThisRound)){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
-            do_debug("Block %d should receive ~%f packets\n", i, (1 - state->p) * nPacketsInFlight[i]);
-            if(( i == 0) && (roundf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
+            //printf("Block %d should receive ~%f packets while %d are known\n", i, (1 - state->p) * nPacketsInFlight[i], state->blocks[i].nPackets);
+            if(( i == 0) && (floorf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
                 // ~~ Send from the first block ~~
-                do_debug("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
+                //printf("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
                 sentInThisRound = true;
                 break;
-            } else if((i != 0) && ((1 - state->p) * nPacketsInFlight[i]) < state->blocks[i].nPackets){
+            } else if((i != 0) && (ceilf((1 - state->p) * nPacketsInFlight[i])) < state->blocks[i].nPackets){
                 // ~~ Send from the i-th block ~~
-                do_debug("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
+                //printf("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
@@ -75,10 +80,12 @@ void onWindowUpdate(encoderstate* state){
             }
         }
         if(totalInFlight == 0){
-            do_debug("All available data has been transfered to the other side\n");
+            printf("All available data has been transfered to the other side\n");
             state->isOutstandingData = false;
         }
     }
+    
+    //printf("After : totalInFlight = %d\n", totalInFlight);
     
     free(nPacketsInFlight);
 }
@@ -88,6 +95,7 @@ void handleInClear(encoderstate* state, uint8_t* buffer, int size){
     // We just have to put data in the next available packet
     int sizeAllocated = 0, i;
     uint16_t currentWriteSize, tmp16;
+    
     while(sizeAllocated < size){
         for(i = 0; (i < state->numBlock) && (sizeAllocated < size); i++){ // Look in already allocated blocks
             if(state->blocks[i].nPackets < BLKSIZE){
@@ -119,10 +127,16 @@ void onTimeOut(encoderstate* state){
     do_debug("in onTimeOut\n");
     state->slowStartMode = true;
     state->congestionWindow = BASE_WINDOW;
+    state->timeOutCounter++;
     
     // ~~ Set time for the next timeOut event ~~
-    gettimeofday(&(state->nextTimeout), NULL);
-    addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->RTT);
+    if(state->isOutstandingData){
+        gettimeofday(&(state->nextTimeout), NULL);
+        addUSec(&(state->nextTimeout), (state->timeOutCounter * COMPUTING_DELAY) + (state->timeOutCounter * TIMEOUT_FACTOR * state->RTT));
+    } else { // No data left to send... let the TO be infinite !
+        state->nextTimeout.tv_sec = 0;
+        state->nextTimeout.tv_usec = 0;
+    }
     
     onWindowUpdate(state);
 }
@@ -132,9 +146,12 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     ackpacket* ack = bufferToAck(buffer, size);
     int losses, i, currentRTT;
     
+    //printf("ACK received :\n");
+    //ackPacketPrint(*ack);
+    
     // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Do not consider it
     if(ack->ack_seqNo < state->seqNo_Una){
-        printf("Outdated ACK, Drop !\n");
+        printf("Outdated ACK (n = %d while una = %d), Drop !\n", ack->ack_seqNo, state->seqNo_Una);
         free(ack);
         return;
     }
@@ -145,6 +162,8 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     if(sentAt.tv_sec == 0){
         // The specified sequence number is unknown... better to ignore this ACK !
         do_debug("Unknown/outdated sequence number, do not refresh parameters !\n");
+        state->seqNo_Una = max(state->seqNo_Una, ack->ack_seqNo + 1);
+        state->p = state->p * (1.0 - SMOOTHING_FACTOR);
         free(ack);
         return;
     }
@@ -158,7 +177,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     if(state->RTTmin != 0){
         state->RTTmin = min(state->RTTmin, state->RTT);
     } else {
-        state->RTTmin = 10 * currentRTT;   // On start, RTTmin = 0 => Set it to the first RTT value encountered
+        state->RTTmin = currentRTT;   // On start, RTTmin = 0 => Set it to the first RTT value encountered
     }
     
     losses = ack->ack_seqNo - state->seqNo_Una;
@@ -166,13 +185,14 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     
     if(losses == 0){
         // 2 fpo
-        state->p = state->p * (1.0 - 3 * SMOOTHING_FACTOR);
+        state->p = state->p * (1.0 - SMOOTHING_FACTOR);
         
         // Arbitrary idea : If there's no losses, reconciliate RTT & RTTmin.
         //3.5fpo
         state->RTTmin = floor(((1 - SMOOTHING_FACTOR) * state->RTTmin) + (SMOOTHING_FACTOR * state->RTT));
     } else {
-        state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
+        // Arbitrary change : 0.5 factor to the losses, because we loose ACKs as well !
+        state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + 0.5 * (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
     }
     
     // ~~ Adjust current block ~~
@@ -198,27 +218,28 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     state->currDof = max(state->currDof, ack->ack_currDof);
     
     // ~~ Update Congestion window ~~
-    do_debug("Congestion Window before actualizing = %u\n", state->congestionWindow);
+    do_debug("Congestion Window before actualizing = %f\n", state->congestionWindow);
     if(state->slowStartMode){
         state->congestionWindow += 1;
         if(state->congestionWindow > SS_THRESHOLD){
             state->slowStartMode = false;
-        }
-    } else { // Congestion avoidance mode
+        } 
+    } else {// Congestion avoidance mode
         if(losses == 0){
             // Arbitrary idea : additive increase
-            state->congestionWindow = 3 + state->congestionWindow;
-            //state->congestionWindow = state->congestionWindow + 10 + (1 / state->congestionWindow);
+            //state->congestionWindow = 3 + state->congestionWindow;
+            state->congestionWindow = state->congestionWindow + (50.0 / state->congestionWindow);
         } else {
-            do_debug("Multiplicative backoff with RTT = %lu & RTTmin = %lu\n", state->RTT, state->RTTmin);
+            //printf("Multiplicative backoff with RTT = %lu & RTTmin = %lu. factor = %f\n", state->RTT, state->RTTmin, ((1.0 * state->RTTmin) / (1.0 * state->RTT)));
             // Arbitrary rule : do NEVER shrink the window by more than 2/3
-            state->congestionWindow = (max(0.66, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
+            state->congestionWindow = (max(0.9, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
+            //state->congestionWindow = ((1.0 * state->RTTmin) / (1.0 * state->RTT)) * state->congestionWindow;
         }
         
         // Arbitrary rule, not from MIT's algos : congestion Win >= SS_THRESHOLD when in cong avoidance mode :
-        state->congestionWindow = max(state->congestionWindow, SS_THRESHOLD);
+        state->congestionWindow = min(MAX_WINDOW, (max(state->congestionWindow, SS_THRESHOLD)));
     }
-    do_debug("Congestion Window after actualizing = %u\n", state->congestionWindow);
+    do_debug("Congestion Window after actualizing = %f\n", state->congestionWindow);
     
     state->seqNo_Una = max(state->seqNo_Una, ack->ack_seqNo + 1);
     
@@ -226,8 +247,15 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     state->nextTimeout.tv_sec = state->time_lastAck.tv_sec;
     state->nextTimeout.tv_usec = state->time_lastAck.tv_usec;
     addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->RTT);
+    state->timeOutCounter = 0;
         
     free(ack);
+    
+    if(state->congestionWindow > MAX_WINDOW){
+        printf("Window reached maximum... DIE !\n");
+        exit(1);
+    }
+    
     onWindowUpdate(state);
 }
 
@@ -257,6 +285,7 @@ encoderstate* encoderStateInit(){
     ret->nextTimeout.tv_sec = 0;
     ret->nextTimeout.tv_usec = 0;
     ret->isOutstandingData = false;
+    ret->timeOutCounter = 0;
     
     return ret;
 }
@@ -320,6 +349,8 @@ void addToPacketSentInfos(packetsentinfo** table, int* nPacketSent, uint32_t seq
     (*table)[*nPacketSent].sentAt.tv_sec = sentAtTime.tv_sec;
     (*table)[*nPacketSent].sentAt.tv_usec = sentAtTime.tv_usec;
     
+    //printf("Added packet #%u fro block %d to the sent table\n", seqNo, blockNo);
+    
     (*nPacketSent) ++;
 }
 
@@ -373,7 +404,6 @@ void sendFromBlock(encoderstate* state, int blockNo){
     
     // First, look for an unsent packet
     for(i = 0; i < state->blocks[blockNo].nPackets; i++){
-        do_debug(" i = %d\n", i);
         if( !(state->blocks[blockNo].isSentPacket[i])){
             // Generate the packet
             packet.blockNo = blockNo + state->currBlock;
@@ -383,6 +413,9 @@ void sendFromBlock(encoderstate* state, int blockNo){
             packet.size = ntohs(tmp16) + 2;
             packet.payloadAndSize = malloc(packet.size * sizeof(uint8_t));
             memcpy(packet.payloadAndSize, state->blocks[blockNo].dataMatrix->data[i], packet.size);
+            
+            //printf("Data to send :\n");
+            //dataPacketPrint(packet);
             
             // Marshall it
             dataPacketToBuffer(packet, buffer, &bufLen);
@@ -414,6 +447,10 @@ void sendFromBlock(encoderstate* state, int blockNo){
     packet.payloadAndSize = malloc(bufLen);
     memcpy(packet.payloadAndSize, buffer, bufLen);
 
+
+    //printf("Data to send :\n");
+    //dataPacketPrint(packet);
+    
     // Marshall it
     dataPacketToBuffer(packet, buffer, &bufLen);
 
@@ -453,7 +490,7 @@ void encoderStatePrint(encoderstate state){
     printf("\tNumber of blocks = %d\n", state.numBlock);
     printf("\tEncoded data to send = %d\n", state.nDataToSend);
     printf("\tCurrent Degrees of Freedom = %u\n", state.currDof);
-    printf("\tCongestion window = %u\n", state.congestionWindow);
+    printf("\tCongestion window = %f\n", state.congestionWindow);
     printf("\tRTT = %ld\n", state.RTT);
     printf("\tRTT min = %ld\n", state.RTTmin);
     printf("\tLoss estimation = %f\n", state.p);

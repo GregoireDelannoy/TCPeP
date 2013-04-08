@@ -95,3 +95,27 @@ void addUSec(struct timeval *a, long t){
     }
 }
 
+int regulator(){
+    static struct timeval *last = 0;
+    struct timeval current, tmp;
+    int ret;
+    gettimeofday(&current, NULL);
+    
+    if(last == 0){
+        last = malloc(sizeof(struct timeval));
+        gettimeofday(last, NULL);
+    }
+
+    tmp.tv_sec = last->tv_sec;
+    tmp.tv_usec = last->tv_usec;
+    addUSec(&tmp, 1000 * REGULATOR);
+    if(isSooner(tmp, current)){
+        ret = true;
+        last->tv_sec = current.tv_sec;
+        last->tv_usec = current.tv_usec;
+    } else {
+        ret = false;
+    }
+    
+    return ret;
+}

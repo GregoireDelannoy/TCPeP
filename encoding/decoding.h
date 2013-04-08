@@ -19,6 +19,11 @@ typedef struct decoderstate_t {
     uint8_t** ackToSend; // Acks to send, via UDP
     int* ackToSendSize;  // Size of the n-th ack
     int nAckToSend;      // Number of acks
+    
+    long unsigned int stats_nAppendedNotInnovativeGalois;
+    long unsigned int stats_nOutdated;
+    long unsigned int stats_nAppendedNotInnovativeCounter;
+    long unsigned int stats_nInnovative;
 } decoderstate;
 
 void handleInCoded(decoderstate* state, uint8_t* buffer, int size);

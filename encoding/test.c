@@ -11,8 +11,9 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 20000
+#define CLEAR_PACKETS 1000
 #define LOSS 0.05
+#define INPUT_LENGTH 300000
 
 
 int galoisTest(){
@@ -90,28 +91,33 @@ int maxMinTest(){
 }
 
 int codingTest(){
+    struct timeval startTime, endTime;
     encoderstate* encState = encoderStateInit();
     decoderstate* decState = decoderStateInit();
-    uint8_t buffer[PACKETSIZE], buf1[2 * PACKETSIZE], buf2[2 * PACKETSIZE], type;
-    int totalBytesSent = 0, totalBytesReceived = 0, totalAckSent = 0, totalAckReceived = 0, totalDataPacketReceived = 0, totalDataPacketSent = 0;
+    uint8_t inputBuffer[INPUT_LENGTH], buf1[2 * PACKETSIZE], buf2[2 * PACKETSIZE], type;
+    int totalBytesSent = 0, totalBytesReceived = 0, totalAckSent = 0, totalAckReceived = 0, totalDataPacketReceived = 0, totalDataPacketSent = 0, nDataPacketSent = 0;
     int i, j, buf1Len, buf2Len;
     muxstate mState;
     mState.sport = 10; mState.dport = 10; mState.remote_ip = 10;
     int nRounds = CLEAR_PACKETS, sendSize;
+    float timeElapsed;
     
-    matrix* randomMatrix = getRandomMatrix(1, PACKETSIZE);
-    mPrint(*randomMatrix);
-    memcpy(buffer, randomMatrix->data[0], PACKETSIZE);
+    matrix* randomMatrix = getRandomMatrix(1, INPUT_LENGTH);
+    memcpy(inputBuffer, randomMatrix->data[0], INPUT_LENGTH);
     mFree(randomMatrix);
     
+    gettimeofday(&startTime, NULL);
     for(i = 0; i<nRounds; i++){
-        //printf("\n~~~~Starting round %d~~~~~\n", i);
-        //encoderStatePrint(*encState);
-        //decoderStatePrint(*decState);
-        //printf("~~~~~~~~~\n");
+        //if(regulator()){
+            //printf("\n~~~~Starting round %d~~~~~\n", i);
+            //encoderStatePrint(*encState);
+            //decoderStatePrint(*decState);
+            //printf("~~~~~~~~~\n");
+        //}
 
-        sendSize = min(PACKETSIZE, (int)(((1.0 *random())/RAND_MAX) * PACKETSIZE));
-        handleInClear(encState, buffer, sendSize);
+        sendSize = (int)(((0.8 + 0.2 *random())/RAND_MAX) * INPUT_LENGTH);
+        //printf("Adding %d to the encoder\n", sendSize);
+        handleInClear(encState, inputBuffer, sendSize);
         totalBytesReceived += sendSize;
 
         // Send ACKs
@@ -142,6 +148,7 @@ int codingTest(){
             bufferToMuxed(encState->dataToSend[j], buf1, encState->dataToSendSize[j], &buf1Len, mState, TYPE_DATA);
             muxedToBuffer(buf1, buf2, buf1Len, &buf2Len, &mState, &type);
             totalDataPacketSent += buf2Len;
+            nDataPacketSent++;
             if(((1.0 * random())/RAND_MAX) > LOSS){
                 handleInCoded(decState, buf2, buf2Len);
                 //printf("Sent a DATA packet\n");
@@ -169,15 +176,19 @@ int codingTest(){
             decState->nDataToSend = 0;
         }
         
-        //printf("\n~~~~End of round~~~~~\n");
-        //encoderStatePrint(*encState);
-        //decoderStatePrint(*decState);
-        //printf("~~~~~~~~~\n");
+        if(regulator()){
+            printf("\n~~~~End of round %d~~~~~\n", i);
+            encoderStatePrint(*encState);
+            decoderStatePrint(*decState);
+            printf("~~~~~~~~~\n");
+        }
         
-        //usleep((1.0 * random() /RAND_MAX) * 10000);
+        //usleep(10000 + (1.0 * random() /RAND_MAX) * 1000);
     }
+    gettimeofday(&endTime, NULL);
+    timeElapsed = 1.0 * (endTime.tv_sec - startTime.tv_sec) + ((endTime.tv_usec - startTime.tv_usec) / 1000000.0);
     
-    printf("During the %d rounds, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d bytes of Data Packets has been sent, %d received.\n%d Ack has been sent, %d received.\n Loss rate = %f. Transmission efficiency = %f\n", nRounds, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, totalAckSent, totalAckReceived, LOSS, 1.0 * totalBytesSent / totalDataPacketReceived);
+    printf("During the %d rounds and %f s, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d bytes of Data Packets has been sent, %d received.\n%d Ack has been sent, %d received.\n Simulated loss rate = %f %%. Transmission efficiency = %f %%. Transmission speed = %f MB/s. Data packet per Rounds = %f\n", nRounds, timeElapsed, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, totalAckSent, totalAckReceived, LOSS, 1.0 * totalBytesSent / totalDataPacketReceived, totalBytesSent / (1024 * 1024 * timeElapsed), 1.0 * nDataPacketSent / nRounds);
     
     encoderStateFree(encState);
     decoderStateFree(decState);
@@ -185,8 +196,8 @@ int codingTest(){
 }
 
 int codingPerf(){
-    matrix *a = getRandomMatrix(100,1000), *b = getRandomMatrix(1000,100), *result;
-    int i, nbRounds = 10;
+    matrix *a = getRandomMatrix(500,127), *b = getRandomMatrix(127,13800), *result;
+    int i, nbRounds = 1;
     struct timeval startTime, endTime;
     
     printf("Normal algo : ");
@@ -214,8 +225,8 @@ int codingPerf(){
 }
 
 int main(int argc, char **argv){
-    //if(matrixTest() && codingPerf()){
-    if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
+    if(codingTest()){
+    //if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
         printf("All test passed.\n");
         return 0;
     } else {

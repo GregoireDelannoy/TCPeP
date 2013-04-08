@@ -1,6 +1,5 @@
 #!/bin/sh
 
-ifconfig tun0 192.168.13.1 pointopoint 192.168.13.2
-iptables -t nat -F
-iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-echo 1 > /proc/sys/net/ipv4/ip_forward
+ifconfig eth0 10.0.0.1
+
+tc qdisc replace dev vboxnet0 root netem loss 5% delay 20ms

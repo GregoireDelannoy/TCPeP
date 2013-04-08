@@ -4,9 +4,11 @@
 #define SO_ORIGINAL_DST 80
 
 /* buffer for reading from tun interface, must be >= 1500 */
-#define BUFSIZE 2000     
+#define BUFSIZE 4096
 #define CLIENT 0
 #define PROXY 1
+
+#define MAXIMUM_RUNTIME 2000
 
 char *progname;
 
@@ -42,6 +44,9 @@ int main(int argc, char *argv[]) {
     int muxTableLength = 0;
     uint16_t sport; uint16_t dport; uint32_t dip;
     struct timeval currentTime, timeOut;
+    
+    // DEBUG !
+    unsigned long int UDPrec = 0, TCPsent = 0;
     
     progname = argv[0];
     
@@ -166,7 +171,7 @@ int main(int argc, char *argv[]) {
             exit(-1);
         }
 
-        do_debug("PROXY: Client connected from %s:%d\n", inet_ntoa(remote.sin_addr), ntohs(remote.sin_port));
+        printf("PROXY: Client connected from %s:%d\n", inet_ntoa(remote.sin_addr), ntohs(remote.sin_port));
     }
     
     while(1) {
@@ -250,11 +255,11 @@ int main(int argc, char *argv[]) {
                 remoteConnect.sin_family = AF_INET;
                 remoteConnect.sin_addr.s_addr = htonl(currentMux.remote_ip);
                 remoteConnect.sin_port = htons(currentMux.dport);
-                do_debug("Connecting to %s:%d\n", inet_ntoa(remoteConnect.sin_addr), currentMux.dport);
+                printf("Connecting to %s:%d\n", inet_ntoa(remoteConnect.sin_addr), currentMux.dport);
                 if (connect(newSock, (struct sockaddr*) &remoteConnect, sizeof(remoteConnect)) < 0) {
                     perror("connect()");
                     
-                    do_debug("Error on connect => we send back a close()\n");
+                    printf("Error on connect => we send back a close()\n");
                     bufferToMuxed(buffer, tmp, 0, &dstLen, (*muxTable)[i], TYPE_CLOSE);
                     udpSend(udpSock_fd, tmp, dstLen, (struct sockaddr*)&remote);
                     removeMux(nMux, muxTable, &muxTableLength);
@@ -265,6 +270,7 @@ int main(int argc, char *argv[]) {
                 do_debug("TYPE_DATA\n");
                 // Pass to the decoder
                 handleInCoded((*muxTable)[nMux].decoderState, tmp, dstLen);
+                UDPrec += dstLen;
             } else if(type == TYPE_ACK){
                 do_debug("TYPE_ACK\n");
                 // Pass to the encoder
@@ -285,14 +291,14 @@ int main(int argc, char *argv[]) {
                 perror("accept()");
                 exit(1);
             }
-            do_debug("Accepted connection from %s:%d ", inet_ntoa(sourceAccept.sin_addr), ntohs(sourceAccept.sin_port));
+            printf("Accepted connection from %s:%d ", inet_ntoa(sourceAccept.sin_addr), ntohs(sourceAccept.sin_port));
             // Read the original informations
             memset(&destinationAccept, 0, sizeof(destinationAccept));
             int destinationLen = sizeof(destinationAccept);
             destinationAccept.sin_family = AF_INET;
             getsockopt(newSock, SOL_IP, SO_ORIGINAL_DST, (struct sockaddr *) &destinationAccept, (socklen_t *)&destinationLen);
             
-            do_debug("to %s:%d\n", inet_ntoa(destinationAccept.sin_addr), ntohs(destinationAccept.sin_port));
+            printf("to %s:%d\n", inet_ntoa(destinationAccept.sin_addr), ntohs(destinationAccept.sin_port));
             
             sport = ntohs(sourceAccept.sin_port);
             dport = ntohs(destinationAccept.sin_port);
@@ -321,14 +327,25 @@ int main(int argc, char *argv[]) {
         
         //Send data and acks
         for(i = 0; i<muxTableLength;i++){
+            //DEBUG :
+            if(regulator()){
+                printf("Sending for mux#%d :\n", i);
+                encoderStatePrint(*(*muxTable)[i].encoderState);
+                decoderStatePrint(*(*muxTable)[i].decoderState);
+                printf("UDPrec = %lu TCPsent = %lu. Efficiency = %f\n", UDPrec, TCPsent, 1.0 * TCPsent/UDPrec);
+            }
+            
+            
             do_debug("Sending for mux#%d :\n", i);
             // Send data to the application
-            if((*muxTable)[i].decoderState->nDataToSend > 0){
+            if((!(*muxTable)[i].closeAwaiting) && ((*muxTable)[i].decoderState->nDataToSend > 0)){
                 nwrite = cwrite((*muxTable)[i].sock_fd, (*muxTable)[i].decoderState->dataToSend, (*muxTable)[i].decoderState->nDataToSend);
                 do_debug("Sent %d decoded bytes to the application\n", nwrite);
                 free((*muxTable)[i].decoderState->dataToSend);
                 (*muxTable)[i].decoderState->dataToSend = 0;
                 (*muxTable)[i].decoderState->nDataToSend = 0;
+                
+                TCPsent += nwrite;
             }
             
             // Send ACKs

@@ -14,6 +14,9 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     uint8_t* coeffVector;
     uint8_t ackBuffer[100];
     
+    //printf("Data received :\n");
+    //dataPacketPrint(*packet);
+    
     do_debug("p->packetNumber = %2x\n", packet->packetNumber);
     
     // ~~ Allocate blocks & coefficient matrix if necessary ~~
@@ -62,17 +65,21 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
             
             if(appendCodedPayload(state, coeffVector, dataVector, packet->blockNo - state->currBlock)){
                 do_debug("Received an innovative packet\n");
+                state->stats_nInnovative++;
             } else {
                 do_debug("Received packet was not innovative. Drop.\n");
+                state->stats_nAppendedNotInnovativeGalois++;
             }
             
             free(dataVector);
             free(coeffVector);
         } else {
             do_debug("Received packet has NO chance to be innovative. Drop.\n");
+            state->stats_nAppendedNotInnovativeCounter++;
         }
     } else {
         do_debug("Packet received for an outdated block. Drop.\n");
+        state->stats_nOutdated++;
     }
     
     // ~~ Try to decode ~~
@@ -90,6 +97,9 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     } else {
         ack.ack_currDof = 0;
     }
+    
+    //printf("ACK to send :\n");
+    //ackPacketPrint(ack);
     
     ackPacketToBuffer(ack, ackBuffer, &bufLen);
     
@@ -122,6 +132,11 @@ decoderstate* decoderStateInit(){
     ret->ackToSend = 0;
     ret->ackToSendSize = 0;
     ret->nAckToSend = 0;
+    
+    ret->stats_nAppendedNotInnovativeCounter = 0;
+    ret->stats_nAppendedNotInnovativeGalois = 0;
+    ret->stats_nInnovative = 0;
+    ret->stats_nOutdated = 0;
 
     return ret;
 }
@@ -268,7 +283,6 @@ void extractData(decoderstate* state){
             state->nPacketsInBlock = realloc(state->nPacketsInBlock, state->numBlock * sizeof(int));
         }
         
-        do_debug("Nothing new decoded this round.\n");
         return;
     }
     
@@ -295,4 +309,5 @@ void decoderStatePrint(decoderstate state){
     printf("\tNumber of blocks = %d\n", state.numBlock);
     printf("\tBytes to send to the application = %d\n", state.nDataToSend);
     printf("\tACKs to send = %d\n", state.nAckToSend);
+    printf("\tInnov = %lu ; notInnovCounter = %lu ; notInnovGalois = %lu ; outdated = %lu\n", state.stats_nInnovative, state.stats_nAppendedNotInnovativeCounter, state.stats_nAppendedNotInnovativeGalois, state.stats_nOutdated);
 }

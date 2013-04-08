@@ -98,6 +98,6 @@ void dataPacketPrint(datapacket p){
 void ackPacketPrint(ackpacket p){
     printf("AckPacket :\n");
     printf("\tcurrBlock = %u\n", p.ack_currBlock);
-    printf("\tSeq No = %u\n", p.ack_seqNo);
+    printf("\tAck Seq No = %u\n", p.ack_seqNo);
     printf("\tcurrDof = %u\n", p.ack_currDof);
 }

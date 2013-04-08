@@ -24,8 +24,10 @@
 #define false 1==0
 #define DEBUG false
 
-#define BLKSIZE 60 // Block size (in number of packets)
+#define BLKSIZE 127 // Block size (in number of packets)
 #define PACKETSIZE 1380 // Maximum payload size (in bytes)
+
+#define REGULATOR 1000 // Make the regulator function return true every REGULATOR milliseconds
 
 void do_debug(char *msg, ...);
 
@@ -40,6 +42,8 @@ int udpSend(int fd, uint8_t *buf, int n, struct sockaddr* remote);
 int isSooner(struct timeval a, struct timeval b);
 
 void addUSec(struct timeval *a, long t);
+
+int regulator();
 
 #endif
 
