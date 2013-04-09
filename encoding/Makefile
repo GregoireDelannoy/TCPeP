@@ -10,8 +10,8 @@ HDR = galois_field.h  matrix.h  packet.h  utils.h encoding.h decoding.h protocol
 	$(CC) $(CFLAGS) -c $<
 
 all:$(OBJ) tcpep.o test.o
-	gcc $(CFLAGS) $(OBJ) tcpep.o -o tcpep
-	gcc $(CFLAGS) $(OBJ) test.o -o test
+	$(CC) $(CFLAGS) $(OBJ) tcpep.o -o tcpep
+	$(CC) $(CFLAGS) $(OBJ) test.o -o test
 
 run:all
 	./tcpep
