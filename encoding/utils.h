@@ -22,12 +22,12 @@
 
 #define true 1==1
 #define false 1==0
-#define DEBUG false
+#define DEBUG true
 
 #define BLKSIZE 127 // Block size (in number of packets)
 #define PACKETSIZE 1380 // Maximum payload size (in bytes)
 
-#define REGULATOR 1000 // Make the regulator function return true every REGULATOR milliseconds
+#define REGULATOR 5000 // Make the regulator function return true every REGULATOR milliseconds
 
 void do_debug(char *msg, ...);
 

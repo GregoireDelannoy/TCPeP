@@ -4,8 +4,8 @@
 #include "packet.h"
 #include "matrix.h"
 
-#define BASE_WINDOW 10.0 // Number of tokens to start with
-#define SS_THRESHOLD 30.0 // Slow start threshold
+#define BASE_WINDOW 30.0 // Number of tokens to start with
+#define SS_THRESHOLD 60.0 // Slow start threshold
 #define MAX_WINDOW 5000 // Should not be needed...
 #define SMOOTHING_FACTOR 0.01 // Smoothing factor
 #define TIMEOUT_FACTOR 5 // Timeout = factor * rtt

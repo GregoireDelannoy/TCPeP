@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -lm -Ofast
+CFLAGS = -Wall -lm -O0 -g
 
 VFLAGS = --track-origins=no --leak-check=full --show-reachable=yes
 
