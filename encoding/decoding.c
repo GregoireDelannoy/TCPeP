@@ -117,7 +117,7 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     countLoss(*state, &loss, &total);
     ack.ack_loss = loss;
     ack.ack_total = total;
-    
+        
     //printf("ACK to send :\n");
     //ackPacketPrint(ack);
     

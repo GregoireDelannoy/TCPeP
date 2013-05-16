@@ -348,7 +348,7 @@ int main(int argc, char *argv[]) {
             }
             
             
-            printf("Sending for mux#%d :\n", i);
+            do_debug("Sending for mux#%d :\n", i);
             
             // Send data to the application
             if(((*muxTable)[i].state != STATE_CLOSEAWAITING) && ((*muxTable)[i].decoderState->nDataToSend > 0)){

@@ -4,13 +4,13 @@
 #include "packet.h"
 #include "matrix.h"
 
-#define BASE_WINDOW 30.0 // Number of tokens to start with
-#define SS_THRESHOLD 60.0 // Slow start threshold
+#define BASE_WINDOW 5.0 // Number of tokens to start with
+#define SS_THRESHOLD 15.0 // Slow start threshold
 #define MAX_WINDOW 5000 // Should not be needed...
 #define SMOOTHING_FACTOR 0.01 // Smoothing factor
 #define TIMEOUT_FACTOR 5 // Timeout = factor * rtt
-#define INFLIGHT_FACTOR 1.8 // Gamma from the papers
-#define COMPUTING_DELAY  10000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
+#define INFLIGHT_FACTOR 1.2 // Gamma from the papers
+#define COMPUTING_DELAY  1000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
 
 typedef struct packetsentinfo_t{
     uint32_t seqNo;
@@ -31,9 +31,8 @@ typedef struct encoderstate_t {
     struct timeval nextTimeout;
     packetsentinfo** packetSentInfos;
     int* nPacketSent;
-    float p; // Short-term average packet loss
+    float p; // Average packet loss from last ack
     unsigned long int RTT ; // Floating Average RTT (microseconds)
-    unsigned long int RTTmin;
     uint32_t seqNo_Next; // Sequence number of the next packet to be transmitted
     uint32_t seqNo_Una;  // Sequence number of the last unacknowledged packet
     struct timeval time_lastAck;

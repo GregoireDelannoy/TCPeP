@@ -4,7 +4,7 @@
 #include "packet.h"
 #include "matrix.h"
 
-#define LOSS_BUFFER_SIZE 5000
+#define LOSS_BUFFER_SIZE 1000
 
 typedef struct lossInformationBuffer_t{
     int isReceived[LOSS_BUFFER_SIZE];

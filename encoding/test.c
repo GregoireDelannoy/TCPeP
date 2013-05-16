@@ -11,9 +11,9 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 1000
-#define LOSS 0.1
-#define INPUT_LENGTH 300000
+#define CLEAR_PACKETS 5000
+#define LOSS 0.3
+#define INPUT_LENGTH 30000
 
 
 int galoisTest(){

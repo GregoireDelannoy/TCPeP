@@ -72,9 +72,9 @@ ackpacket* bufferToAck(uint8_t* buffer, int size){
     p->ack_currDof = tmp8;
     memcpy(&tmp32, buffer + 3, 4);
     p->ack_seqNo = ntohl(tmp32);
-    memcpy(&tmp16, buffer + 5, 2);
-    p->ack_loss = ntohs(tmp16);
     memcpy(&tmp16, buffer + 7, 2);
+    p->ack_loss = ntohs(tmp16);
+    memcpy(&tmp16, buffer + 9, 2);
     p->ack_total = ntohs(tmp16);
     
     return p;
@@ -108,4 +108,6 @@ void ackPacketPrint(ackpacket p){
     printf("\tcurrBlock = %u\n", p.ack_currBlock);
     printf("\tAck Seq No = %u\n", p.ack_seqNo);
     printf("\tcurrDof = %u\n", p.ack_currDof);
+    printf("\tloss = %u\n", p.ack_loss);
+    printf("\ttotal = %u\n", p.ack_total);
 }

@@ -144,14 +144,13 @@ void onTimeOut(encoderstate* state){
 void onAck(encoderstate* state, uint8_t* buffer, int size){
     do_debug("in onAck :\n");
     ackpacket* ack = bufferToAck(buffer, size);
-    int losses, i, currentRTT;
+    int i, currentRTT;
     
-    //printf("ACK received :\n");
-    //ackPacketPrint(*ack);
+    do_debug("ACK received :\n");
     
     // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Do not consider it
     if(ack->ack_seqNo < state->seqNo_Una){
-        printf("Outdated ACK (n = %d while una = %d), Drop !\n", ack->ack_seqNo, state->seqNo_Una);
+        do_debug("Outdated ACK (n = %d while una = %d), Drop !\n", ack->ack_seqNo, state->seqNo_Una);
         free(ack);
         return;
     }
@@ -160,10 +159,9 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     gettimeofday(&(state->time_lastAck), NULL);
     struct timeval sentAt = sentAtTime(*(state->packetSentInfos), *(state->nPacketSent), ack->ack_seqNo);
     if(sentAt.tv_sec == 0){
-        // The specified sequence number is unknown... better to ignore this ACK !
+        // The specified sequence number is unknown... better ignore this ACK !
         do_debug("Unknown/outdated sequence number, do not refresh parameters !\n");
         state->seqNo_Una = max(state->seqNo_Una, ack->ack_seqNo + 1);
-        state->p = state->p * (1.0 - SMOOTHING_FACTOR);
         free(ack);
         return;
     }
@@ -171,29 +169,15 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     currentRTT = 1000000 * (state->time_lastAck.tv_sec - sentAt.tv_sec) + (state->time_lastAck.tv_usec - sentAt.tv_usec);
     do_debug("RTT for current ACK = %d\n", currentRTT);
     
-    
-    state->RTT = ((1 - SMOOTHING_FACTOR) * state->RTT) + (SMOOTHING_FACTOR * currentRTT);
-    
-    if(state->RTTmin != 0){
-        state->RTTmin = min(state->RTTmin, state->RTT);
-    } else {
-        state->RTTmin = currentRTT;   // On start, RTTmin = 0 => Set it to the first RTT value encountered
+    // Actualize the RTT average
+    if(state->RTT != 0){
+        state->RTT = ((1 - SMOOTHING_FACTOR) * state->RTT) + (SMOOTHING_FACTOR * currentRTT);
+    } else { // We are initializing it
+        state->RTT = currentRTT;
     }
     
-    losses = ack->ack_seqNo - state->seqNo_Una;
-    do_debug("%d losses, p = %f\n", losses, state->p);
-    
-    if(losses == 0){
-        // 2 fpo
-        state->p = state->p * (1.0 - SMOOTHING_FACTOR);
-        
-        // Arbitrary idea : If there's no losses, reconciliate RTT & RTTmin.
-        //3.5fpo
-        state->RTTmin = floor(((1 - SMOOTHING_FACTOR) * state->RTTmin) + (SMOOTHING_FACTOR * state->RTT));
-    } else {
-        // Arbitrary change : 0.5 factor to the losses, because we loose ACKs as well !
-        state->p = state->p * powf(1.0 - SMOOTHING_FACTOR, losses + 1.0) + 0.5 * (1 - powf(1.0 - SMOOTHING_FACTOR, (float)losses));
-    }
+    // Actualize the packet loss ratio
+    state->p = 1.0 * ack->ack_loss / ack->ack_total;
     
     // ~~ Adjust current block ~~
     while(ack->ack_currBlock > state->currBlock){
@@ -214,8 +198,8 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
         state->currBlock++;
         state->currDof = ack->ack_currDof;
     }
-    
     state->currDof = max(state->currDof, ack->ack_currDof);
+    
     
     // ~~ Update Congestion window ~~
     do_debug("Congestion Window before actualizing = %f\n", state->congestionWindow);
@@ -225,19 +209,11 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
             state->slowStartMode = false;
         } 
     } else {// Congestion avoidance mode
-        if(losses == 0){
-            // Arbitrary idea : additive increase ; DOES NOT WORK REALLY WELL !
-            //state->congestionWindow = 3 + state->congestionWindow;
-            state->congestionWindow = state->congestionWindow + (30.0 / state->congestionWindow);
+        if(currentRTT > state->RTT){
+            state->congestionWindow -= 1/state->congestionWindow;
         } else {
-            //printf("Multiplicative backoff with RTT = %lu & RTTmin = %lu. factor = %f\n", state->RTT, state->RTTmin, ((1.0 * state->RTTmin) / (1.0 * state->RTT)));
-            // Arbitrary rule : do NEVER shrink the window by more than 2/3
-            state->congestionWindow = (max(0.66, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
-            //state->congestionWindow = ((1.0 * state->RTTmin) / (1.0 * state->RTT)) * state->congestionWindow;
+            state->congestionWindow += 1/state->congestionWindow;
         }
-        
-        // Arbitrary rule, not from MIT's algos : congestion Win >= SS_THRESHOLD when in cong avoidance mode :
-        state->congestionWindow = min(MAX_WINDOW, (max(state->congestionWindow, SS_THRESHOLD)));
     }
     do_debug("Congestion Window after actualizing = %f\n", state->congestionWindow);
     
@@ -270,7 +246,6 @@ encoderstate* encoderStateInit(){
     *(ret->nPacketSent) = 0;
     ret->p = 0.0;
     ret->RTT = 0;
-    ret->RTTmin = 0;
     ret->seqNo_Next = 0;
     ret->seqNo_Una = 0;
     ret->congestionWindow = BASE_WINDOW;
@@ -492,6 +467,5 @@ void encoderStatePrint(encoderstate state){
     printf("\tCurrent Degrees of Freedom = %u\n", state.currDof);
     printf("\tCongestion window = %f\n", state.congestionWindow);
     printf("\tRTT = %ld\n", state.RTT);
-    printf("\tRTT min = %ld\n", state.RTTmin);
     printf("\tLoss estimation = %f\n", state.p);
 }

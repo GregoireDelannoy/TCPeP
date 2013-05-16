@@ -1,6 +1,7 @@
 CC = gcc
-#CFLAGS = -Wall -lm -O0 -g
-CFLAGS = -Wall -lm -Ofast
+#CFLAGS = -Wall -lm -O0 -g   # Normal debug
+#CFLAGS = -Wall -lm -O0 -g -pg    # Profiling
+CFLAGS = -Wall -lm -Ofast   # Prod
 
 VFLAGS = --track-origins=no --leak-check=full --show-reachable=yes
 
