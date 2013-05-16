@@ -4,9 +4,19 @@
 #include "packet.h"
 #include "matrix.h"
 
+#define LOSS_BUFFER_SIZE 5000
+
+typedef struct lossInformationBuffer_t{
+    int isReceived[LOSS_BUFFER_SIZE];
+    int currentIndex;
+} lossInformationBuffer;
+
+
 typedef struct decoderstate_t {
     matrix** blocks;
     matrix** coefficients;
+    
+    lossInformationBuffer* lossBuffer; // Store information about received packets, to estimate loss at the receiver side
     
     uint16_t currBlock;
     int numBlock; // Currently allocated blocks
@@ -19,6 +29,8 @@ typedef struct decoderstate_t {
     uint8_t** ackToSend; // Acks to send, via UDP
     int* ackToSendSize;  // Size of the n-th ack
     int nAckToSend;      // Number of acks
+    
+    uint32_t lastSeqReceived; // Highest sequence number seen
     
     long unsigned int stats_nAppendedNotInnovativeGalois;
     long unsigned int stats_nOutdated;

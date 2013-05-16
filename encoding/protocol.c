@@ -56,7 +56,7 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, int sock_fd, m
     (*statesTable)[(*tableLength) - 1].udpRemote.sin_addr.s_addr = udpRemoteAddr.sin_addr.s_addr;
     (*statesTable)[(*tableLength) - 1].udpRemote.sin_port = udpRemoteAddr.sin_port;
     
-    printMux((*statesTable)[(*tableLength) - 1]);
+    //printMux((*statesTable)[(*tableLength) - 1]);
     
     return (*tableLength) - 1;
 }

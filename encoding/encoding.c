@@ -171,7 +171,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     currentRTT = 1000000 * (state->time_lastAck.tv_sec - sentAt.tv_sec) + (state->time_lastAck.tv_usec - sentAt.tv_usec);
     do_debug("RTT for current ACK = %d\n", currentRTT);
     
-    // 1 fpo
+    
     state->RTT = ((1 - SMOOTHING_FACTOR) * state->RTT) + (SMOOTHING_FACTOR * currentRTT);
     
     if(state->RTTmin != 0){
@@ -226,13 +226,13 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
         } 
     } else {// Congestion avoidance mode
         if(losses == 0){
-            // Arbitrary idea : additive increase
+            // Arbitrary idea : additive increase ; DOES NOT WORK REALLY WELL !
             //state->congestionWindow = 3 + state->congestionWindow;
-            state->congestionWindow = state->congestionWindow + (50.0 / state->congestionWindow);
+            state->congestionWindow = state->congestionWindow + (30.0 / state->congestionWindow);
         } else {
             //printf("Multiplicative backoff with RTT = %lu & RTTmin = %lu. factor = %f\n", state->RTT, state->RTTmin, ((1.0 * state->RTTmin) / (1.0 * state->RTT)));
             // Arbitrary rule : do NEVER shrink the window by more than 2/3
-            state->congestionWindow = (max(0.9, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
+            state->congestionWindow = (max(0.66, ((1.0 * state->RTTmin) / (1.0 * state->RTT)))) * state->congestionWindow;
             //state->congestionWindow = ((1.0 * state->RTTmin) / (1.0 * state->RTT)) * state->congestionWindow;
         }
         

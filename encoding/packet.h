@@ -21,6 +21,8 @@ typedef struct ackpacket_t {
     uint16_t ack_currBlock; // Smallest undecoded block
     uint8_t ack_currDof; // Degrees of freedom recovered for the current block
     uint32_t ack_seqNo; // Sequence Number for the currently acknowledged packet
+    uint16_t ack_loss;  // Number of lost packets in the seen set
+    uint16_t ack_total; // Total number of packets in the seen set
 } ackpacket;
 
 void dataPacketPrint(datapacket p);

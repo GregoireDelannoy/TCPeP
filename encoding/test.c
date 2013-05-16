@@ -12,7 +12,7 @@
 
 
 #define CLEAR_PACKETS 1000
-#define LOSS 0.05
+#define LOSS 0.1
 #define INPUT_LENGTH 300000
 
 

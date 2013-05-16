@@ -5,14 +5,17 @@ void extractData(decoderstate* state);
 
 int isZeroAndOneAt(uint8_t* vector, int index, int size);
 
+void countLoss(decoderstate state, uint16_t* lost, uint16_t* total);
+
 void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     do_debug("in handleInCoded\n");
     datapacket* packet = bufferToData(buffer, size);
     matrix *coeffs, *tmp;
-    int bufLen, i;
+    int bufLen, i, delta;
     uint8_t* dataVector;
     uint8_t* coeffVector;
     uint8_t ackBuffer[100];
+    uint16_t loss, total;
     
     //printf("Data received :\n");
     //dataPacketPrint(*packet);
@@ -88,6 +91,20 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
         extractData(state);
     }
     
+    
+    // ~~ Update the loss information buffer ~~
+    delta = packet->seqNo - state->lastSeqReceived;
+    if(delta > 0){
+        for(i = state->lossBuffer->currentIndex + 1; i < (state->lossBuffer->currentIndex + delta); i++){
+            state->lossBuffer->isReceived[i % LOSS_BUFFER_SIZE] = false;
+        }
+        state->lossBuffer->isReceived[(state->lossBuffer->currentIndex + delta) % LOSS_BUFFER_SIZE] = true;
+        state->lossBuffer->currentIndex = (state->lossBuffer->currentIndex + delta) % LOSS_BUFFER_SIZE;
+    } else {
+        state->lossBuffer->isReceived[(state->lossBuffer->currentIndex + delta + LOSS_BUFFER_SIZE) % LOSS_BUFFER_SIZE] = true;
+    }
+    state->lastSeqReceived = max(state->lastSeqReceived, packet->seqNo);
+    
     // ~~ Send an ACK back ~~
     ackpacket ack;
     ack.ack_seqNo = packet->seqNo;
@@ -97,6 +114,9 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     } else {
         ack.ack_currDof = 0;
     }
+    countLoss(*state, &loss, &total);
+    ack.ack_loss = loss;
+    ack.ack_total = total;
     
     //printf("ACK to send :\n");
     //ackPacketPrint(ack);
@@ -116,6 +136,7 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
 }
 
 decoderstate* decoderStateInit(){
+    int i;
     decoderstate* ret = malloc(sizeof(decoderstate));
     
     ret->blocks = 0;
@@ -125,6 +146,14 @@ decoderstate* decoderStateInit(){
     ret->numBlock = 0;
     ret->nPacketsInBlock = 0;
     ret->isSentPacketInBlock = 0;
+    
+    ret->lossBuffer = malloc(sizeof(lossInformationBuffer));
+    for(i = 0; i < LOSS_BUFFER_SIZE; i++){// Initialize the counter
+        ret->lossBuffer->isReceived[i] = -1;
+    }
+    ret->lossBuffer->currentIndex = 0;
+    
+    ret->lastSeqReceived = 0;
     
     ret->dataToSend = 0;
     ret->nDataToSend = 0;
@@ -167,6 +196,8 @@ void decoderStateFree(decoderstate* state){
         free(state->ackToSend);
         free(state->ackToSendSize);
     }
+    
+    free(state->lossBuffer);
     
     free(state);
 }
@@ -310,4 +341,24 @@ void decoderStatePrint(decoderstate state){
     printf("\tBytes to send to the application = %d\n", state.nDataToSend);
     printf("\tACKs to send = %d\n", state.nAckToSend);
     printf("\tInnov = %lu ; notInnovCounter = %lu ; notInnovGalois = %lu ; outdated = %lu\n", state.stats_nInnovative, state.stats_nAppendedNotInnovativeCounter, state.stats_nAppendedNotInnovativeGalois, state.stats_nOutdated);
+}
+
+void countLoss(decoderstate state, uint16_t* lost, uint16_t* total){
+    int i;
+    *lost = 0;
+    *total = 0;
+    
+    for(i = 0; i < LOSS_BUFFER_SIZE; i++){
+        switch(state.lossBuffer->isReceived[i]){
+            case true:
+                *total += 1;
+                break;
+            case false:
+                *total += 1;
+                *lost += 1;
+                break;
+            default:
+                break;
+        }
+    }
 }

@@ -32,7 +32,7 @@ int cread(int fd, uint8_t *buf, int n){
     int nread;
 
     if((nread=read(fd, buf, n)) < 0){
-        perror("Reading data");
+        perror("in utils.c : Reading data");
         exit(1);
     }
     return nread;
@@ -58,7 +58,7 @@ int cwrite(int fd, uint8_t *buf, int n){
     while(totalWrite<n){
         if((nwrite=write(fd, buf, n)) < 0){
             perror("In utils.c: Writing data");
-            exit(1);
+            return(-1);
         } else {
             totalWrite += nwrite;
         }
@@ -102,7 +102,7 @@ int regulator(){
     gettimeofday(&current, NULL);
     
     if(last == 0){
-        last = malloc(sizeof(struct timeval));
+        last = malloc(sizeof(struct timeval)); // Note : that will cause a memory leak of 16 bytes. Not dependant on anything.
         gettimeofday(last, NULL);
     }
 

@@ -22,7 +22,7 @@
 
 #define true 1==1
 #define false 1==0
-#define DEBUG true
+#define DEBUG false
 
 #define BLKSIZE 127 // Block size (in number of packets)
 #define PACKETSIZE 1380 // Maximum payload size (in bytes)

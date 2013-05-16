@@ -48,13 +48,17 @@ void ackPacketToBuffer(ackpacket p, uint8_t* buffer, int* size){
     memcpy(buffer + 2, &tmp8, 1);
     tmp32 = htonl(p.ack_seqNo);
     memcpy(buffer + 3, &tmp32, 4);
+    tmp16 = htons(p.ack_loss);
+    memcpy(buffer + 7, &tmp16, 2);
+    tmp16 = htons(p.ack_total);
+    memcpy(buffer + 9, &tmp16, 2);
     
-    (*size) = 7;
+    (*size) = 11;
 }
 
 ackpacket* bufferToAck(uint8_t* buffer, int size){
-    if(size != 7){
-        printf("Buffer to ack => size != 7. DIE.\n");
+    if(size != 11){
+        printf("Buffer to ack => size != 11. DIE.\n");
         exit(1);
     }
     uint8_t tmp8;
@@ -68,6 +72,10 @@ ackpacket* bufferToAck(uint8_t* buffer, int size){
     p->ack_currDof = tmp8;
     memcpy(&tmp32, buffer + 3, 4);
     p->ack_seqNo = ntohl(tmp32);
+    memcpy(&tmp16, buffer + 5, 2);
+    p->ack_loss = ntohs(tmp16);
+    memcpy(&tmp16, buffer + 7, 2);
+    p->ack_total = ntohs(tmp16);
     
     return p;
 }
