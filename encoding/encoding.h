@@ -7,10 +7,13 @@
 #define BASE_WINDOW 5.0 // Number of tokens to start with
 #define SS_THRESHOLD 15.0 // Slow start threshold
 #define MAX_WINDOW 5000 // Should not be needed...
-#define SMOOTHING_FACTOR 0.01 // Smoothing factor
+#define SMOOTHING_FACTOR_LONG 0.001 // Smoothing factor for the long term average
+#define SMOOTHING_FACTOR_SHORT 0.1 // Smoothing factor for the short term average
 #define TIMEOUT_FACTOR 5 // Timeout = factor * rtt
 #define INFLIGHT_FACTOR 1.2 // Gamma from the papers
 #define COMPUTING_DELAY  1000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
+#define ALPHA 0.05 
+#define BETA 0.2   // Alpha and Beta are Thresholds for the congestion-control algorithm
 
 typedef struct packetsentinfo_t{
     uint32_t seqNo;
@@ -32,7 +35,8 @@ typedef struct encoderstate_t {
     packetsentinfo** packetSentInfos;
     int* nPacketSent;
     float p; // Average packet loss from last ack
-    unsigned long int RTT ; // Floating Average RTT (microseconds)
+    double shortTermRttAverage ; // Floating Average RTT (microseconds), short term
+    double longTermRttAverage ; // Floating Average RTT (microseconds), long term
     uint32_t seqNo_Next; // Sequence number of the next packet to be transmitted
     uint32_t seqNo_Una;  // Sequence number of the last unacknowledged packet
     struct timeval time_lastAck;

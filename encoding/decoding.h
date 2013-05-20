@@ -32,7 +32,8 @@ typedef struct decoderstate_t {
     
     uint32_t lastSeqReceived; // Highest sequence number seen
     
-    long unsigned int stats_nAppendedNotInnovativeGalois;
+    long unsigned int stats_nAppendedNotInnovativeGaloisFirstBlock;
+    long unsigned int stats_nAppendedNotInnovativeGaloisOtherBlock;
     long unsigned int stats_nOutdated;
     long unsigned int stats_nAppendedNotInnovativeCounter;
     long unsigned int stats_nInnovative;

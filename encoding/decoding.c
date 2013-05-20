@@ -71,7 +71,11 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
                 state->stats_nInnovative++;
             } else {
                 do_debug("Received packet was not innovative. Drop.\n");
-                state->stats_nAppendedNotInnovativeGalois++;
+                if(packet->blockNo - state->currBlock == 0){
+                    state->stats_nAppendedNotInnovativeGaloisFirstBlock++;
+                } else {
+                    state->stats_nAppendedNotInnovativeGaloisOtherBlock++;
+                }
             }
             
             free(dataVector);
@@ -163,7 +167,8 @@ decoderstate* decoderStateInit(){
     ret->nAckToSend = 0;
     
     ret->stats_nAppendedNotInnovativeCounter = 0;
-    ret->stats_nAppendedNotInnovativeGalois = 0;
+    ret->stats_nAppendedNotInnovativeGaloisFirstBlock = 0;
+    ret->stats_nAppendedNotInnovativeGaloisOtherBlock = 0;
     ret->stats_nInnovative = 0;
     ret->stats_nOutdated = 0;
 
@@ -340,7 +345,7 @@ void decoderStatePrint(decoderstate state){
     printf("\tNumber of blocks = %d\n", state.numBlock);
     printf("\tBytes to send to the application = %d\n", state.nDataToSend);
     printf("\tACKs to send = %d\n", state.nAckToSend);
-    printf("\tInnov = %lu ; notInnovCounter = %lu ; notInnovGalois = %lu ; outdated = %lu\n", state.stats_nInnovative, state.stats_nAppendedNotInnovativeCounter, state.stats_nAppendedNotInnovativeGalois, state.stats_nOutdated);
+    printf("\tInnov = %lu ; notInnovCounter = %lu ; notInnovGaloisFirstBlock = %lu ;notInnovGaloisOtherBlock = %lu ; outdated = %lu\n", state.stats_nInnovative, state.stats_nAppendedNotInnovativeCounter, state.stats_nAppendedNotInnovativeGaloisFirstBlock, state.stats_nAppendedNotInnovativeGaloisOtherBlock, state.stats_nOutdated);
 }
 
 void countLoss(decoderstate state, uint16_t* lost, uint16_t* total){

@@ -34,8 +34,8 @@ void onWindowUpdate(encoderstate* state){
             continue;
         }
         
-        if(state->RTT != 0){
-            addUSec(&timeOfArrival, (state->RTT * INFLIGHT_FACTOR) + COMPUTING_DELAY);
+        if(state->shortTermRttAverage != 0){
+            addUSec(&timeOfArrival, (state->shortTermRttAverage * INFLIGHT_FACTOR) + COMPUTING_DELAY);
         } else {
             addUSec(&timeOfArrival, 10000000); // Add 10 seconds, if RTT = 0
         }
@@ -61,8 +61,8 @@ void onWindowUpdate(encoderstate* state){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
             //printf("Block %d should receive ~%f packets while %d are known\n", i, (1 - state->p) * nPacketsInFlight[i], state->blocks[i].nPackets);
-            if(( i == 0) && (floorf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
-                // ~~ Send from the first block ~~
+            if(( i == 0) && (ceilf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
+                 //~~ Send from the first block ~~
                 //printf("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
                 sendFromBlock(state, i);
                 totalInFlight ++;
@@ -132,7 +132,7 @@ void onTimeOut(encoderstate* state){
     // ~~ Set time for the next timeOut event ~~
     if(state->isOutstandingData){
         gettimeofday(&(state->nextTimeout), NULL);
-        addUSec(&(state->nextTimeout), (state->timeOutCounter * COMPUTING_DELAY) + (state->timeOutCounter * TIMEOUT_FACTOR * state->RTT));
+        addUSec(&(state->nextTimeout), (state->timeOutCounter * COMPUTING_DELAY) + (state->timeOutCounter * TIMEOUT_FACTOR * state->longTermRttAverage));
     } else { // No data left to send... let the TO be infinite !
         state->nextTimeout.tv_sec = 0;
         state->nextTimeout.tv_usec = 0;
@@ -145,6 +145,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     do_debug("in onAck :\n");
     ackpacket* ack = bufferToAck(buffer, size);
     int i, currentRTT;
+    float delta;
     
     do_debug("ACK received :\n");
     
@@ -165,16 +166,19 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
         free(ack);
         return;
     }
-    
     currentRTT = 1000000 * (state->time_lastAck.tv_sec - sentAt.tv_sec) + (state->time_lastAck.tv_usec - sentAt.tv_usec);
-    do_debug("RTT for current ACK = %d\n", currentRTT);
+    //printf("RTT for current ACK = %d\n", currentRTT);
     
     // Actualize the RTT average
-    if(state->RTT != 0){
-        state->RTT = ((1 - SMOOTHING_FACTOR) * state->RTT) + (SMOOTHING_FACTOR * currentRTT);
+    if(state->longTermRttAverage != 0){
+        state->longTermRttAverage = ((1 - SMOOTHING_FACTOR_LONG) * state->longTermRttAverage) + (SMOOTHING_FACTOR_LONG * currentRTT);
+        state->shortTermRttAverage = ((1 - SMOOTHING_FACTOR_SHORT) * state->shortTermRttAverage) + (SMOOTHING_FACTOR_SHORT * currentRTT);
     } else { // We are initializing it
-        state->RTT = currentRTT;
+        state->longTermRttAverage = currentRTT;
+        state->shortTermRttAverage = currentRTT;
     }
+    
+    //printf("Short-term RTT : %f, long-term :%f\n", state->shortTermRttAverage, state->longTermRttAverage);
     
     // Actualize the packet loss ratio
     state->p = 1.0 * ack->ack_loss / ack->ack_total;
@@ -209,10 +213,19 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
             state->slowStartMode = false;
         } 
     } else {// Congestion avoidance mode
-        if(currentRTT > state->RTT){
-            state->congestionWindow -= 1/state->congestionWindow;
-        } else {
-            state->congestionWindow += 1/state->congestionWindow;
+        delta = 1 - (state->longTermRttAverage / state->shortTermRttAverage);
+        if(delta < ALPHA){
+            // Increase the window :
+            state->congestionWindow += (1.0 / state->congestionWindow);
+        } else if(delta > BETA) {
+            // Decrease the window
+            state->congestionWindow -= (1.0 / state->congestionWindow);
+        }
+        // If delta is in between, do not update the window
+        
+        // Avoid floating-point errors ; the window should never get lower than the BASE !
+        if(state->congestionWindow < BASE_WINDOW){
+            state->congestionWindow = BASE_WINDOW;
         }
     }
     do_debug("Congestion Window after actualizing = %f\n", state->congestionWindow);
@@ -222,7 +235,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     // ~~ Set time for the next timeOut event ~~
     state->nextTimeout.tv_sec = state->time_lastAck.tv_sec;
     state->nextTimeout.tv_usec = state->time_lastAck.tv_usec;
-    addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->RTT);
+    addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->longTermRttAverage);
     state->timeOutCounter = 0;
         
     free(ack);
@@ -245,7 +258,8 @@ encoderstate* encoderStateInit(){
     ret->nPacketSent = malloc(sizeof(int));
     *(ret->nPacketSent) = 0;
     ret->p = 0.0;
-    ret->RTT = 0;
+    ret->longTermRttAverage = 0;
+    ret->shortTermRttAverage = 0;
     ret->seqNo_Next = 0;
     ret->seqNo_Una = 0;
     ret->congestionWindow = BASE_WINDOW;
@@ -466,6 +480,7 @@ void encoderStatePrint(encoderstate state){
     printf("\tEncoded data to send = %d\n", state.nDataToSend);
     printf("\tCurrent Degrees of Freedom = %u\n", state.currDof);
     printf("\tCongestion window = %f\n", state.congestionWindow);
-    printf("\tRTT = %ld\n", state.RTT);
+    printf("\tlong-term RTT = %f\n", state.longTermRttAverage);
+    printf("\tshort-term RTT = %f\n", state.shortTermRttAverage);
     printf("\tLoss estimation = %f\n", state.p);
 }

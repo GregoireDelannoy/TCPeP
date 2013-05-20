@@ -11,9 +11,9 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 5000
-#define LOSS 0.3
-#define INPUT_LENGTH 30000
+#define CLEAR_PACKETS 100000
+#define LOSS 0.1
+#define INPUT_LENGTH 3000
 
 
 int galoisTest(){
@@ -115,7 +115,8 @@ int codingTest(){
             //printf("~~~~~~~~~\n");
         //}
 
-        sendSize = (int)(((0.8 + 0.2 *random())/RAND_MAX) * INPUT_LENGTH);
+        //sendSize = (int)(((0.8 + 0.2 *random())/RAND_MAX) * INPUT_LENGTH);
+        sendSize = PACKETSIZE - 10;
         //printf("Adding %d to the encoder\n", sendSize);
         handleInClear(encState, inputBuffer, sendSize);
         totalBytesReceived += sendSize;
@@ -151,7 +152,7 @@ int codingTest(){
             nDataPacketSent++;
             if(((1.0 * random())/RAND_MAX) > LOSS){
                 handleInCoded(decState, buf2, buf2Len);
-                //printf("Sent a DATA packet\n");
+                //printf("Sent a DATA packet from buf1:%d to buf2:%d\n", buf1Len, buf2Len);
                 totalDataPacketReceived += buf2Len;
             } else {
                 //printf("Lost a data packet\n");
@@ -187,6 +188,9 @@ int codingTest(){
     }
     gettimeofday(&endTime, NULL);
     timeElapsed = 1.0 * (endTime.tv_sec - startTime.tv_sec) + ((endTime.tv_usec - startTime.tv_usec) / 1000000.0);
+    
+    encoderStatePrint(*encState);
+    decoderStatePrint(*decState);
     
     printf("During the %d rounds and %f s, %d bytes has been received by the encoder ; %d has been sent to the application.\n%d bytes of Data Packets has been sent, %d received.\n%d Ack has been sent, %d received.\n Simulated loss rate = %f %%. Transmission efficiency = %f %%. Transmission speed = %f MB/s. Data packet per Rounds = %f\n", nRounds, timeElapsed, totalBytesReceived, totalBytesSent, totalDataPacketSent, totalDataPacketReceived, totalAckSent, totalAckReceived, LOSS, 1.0 * totalBytesSent / totalDataPacketReceived, totalBytesSent / (1024 * 1024 * timeElapsed), 1.0 * nDataPacketSent / nRounds);
     
