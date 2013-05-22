@@ -38,44 +38,53 @@ datapacket* bufferToData(uint8_t* buffer, int size){
 }
 
 void ackPacketToBuffer(ackpacket p, uint8_t* buffer, int* size){
+    int i;
     uint8_t tmp8;
     uint16_t tmp16;
     uint32_t tmp32;
     
     tmp16 = htons(p.ack_currBlock);
     memcpy(buffer, &tmp16, 2);
-    tmp8 = p.ack_currDof;
-    memcpy(buffer + 2, &tmp8, 1);
     tmp32 = htonl(p.ack_seqNo);
-    memcpy(buffer + 3, &tmp32, 4);
+    memcpy(buffer + 2, &tmp32, 4);
     tmp16 = htons(p.ack_loss);
-    memcpy(buffer + 7, &tmp16, 2);
+    memcpy(buffer + 6, &tmp16, 2);
     tmp16 = htons(p.ack_total);
-    memcpy(buffer + 9, &tmp16, 2);
+    memcpy(buffer + 8, &tmp16, 2);
+    for(i = 0; i < DOFS_LENGTH; i++){
+        tmp8 = p.ack_dofs[i];
+        memcpy(buffer + 10 + i, &tmp8, 1);
+    }
     
-    (*size) = 11;
+    
+    (*size) = 10 + DOFS_LENGTH;
 }
 
 ackpacket* bufferToAck(uint8_t* buffer, int size){
-    if(size != 11){
-        printf("Buffer to ack => size != 11. DIE.\n");
+    int i;
+    if(size != 10 + DOFS_LENGTH){
+        printf("Buffer to ack => size is not what was expected. DIE.\n");
         exit(1);
     }
     uint8_t tmp8;
     uint16_t tmp16;
     uint32_t tmp32;
     ackpacket* p = malloc(sizeof(ackpacket));
+    p->ack_dofs = malloc(DOFS_LENGTH * sizeof(uint8_t));
     
     memcpy(&tmp16, buffer, 2);
     p->ack_currBlock = ntohs(tmp16);
-    memcpy(&tmp8, buffer + 2, 1);
-    p->ack_currDof = tmp8;
-    memcpy(&tmp32, buffer + 3, 4);
+    memcpy(&tmp32, buffer + 2, 4);
     p->ack_seqNo = ntohl(tmp32);
-    memcpy(&tmp16, buffer + 7, 2);
+    memcpy(&tmp16, buffer + 6, 2);
     p->ack_loss = ntohs(tmp16);
-    memcpy(&tmp16, buffer + 9, 2);
+    memcpy(&tmp16, buffer + 8, 2);
     p->ack_total = ntohs(tmp16);
+    
+    for(i = 0; i < DOFS_LENGTH; i++){
+        memcpy(&tmp8, buffer + 10 + i, 1);
+        p->ack_dofs[i] = tmp8;
+    }
     
     return p;
 }
@@ -104,10 +113,13 @@ void dataPacketPrint(datapacket p){
 }
 
 void ackPacketPrint(ackpacket p){
+    int i;
     printf("AckPacket :\n");
     printf("\tcurrBlock = %u\n", p.ack_currBlock);
     printf("\tAck Seq No = %u\n", p.ack_seqNo);
-    printf("\tcurrDof = %u\n", p.ack_currDof);
+    for(i = 0; i < DOFS_LENGTH; i++){
+        printf("\tdofs for block %i = %u\n", i, p.ack_dofs[i]);
+    }
     printf("\tloss = %u\n", p.ack_loss);
     printf("\ttotal = %u\n", p.ack_total);
 }

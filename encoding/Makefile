@@ -3,7 +3,7 @@ CC = gcc
 #CFLAGS = -Wall -lm -O0 -g -pg    # Profiling
 CFLAGS = -Wall -lm -Ofast   # Prod
 
-VFLAGS = --track-origins=no --leak-check=full --show-reachable=yes
+VFLAGS = --track-origins=yes --leak-check=full --show-reachable=yes
 
 OBJ = galois_field.o matrix.o  packet.o encoding.o decoding.o utils.o protocol.o
 HDR = galois_field.h  matrix.h  packet.h  utils.h encoding.h decoding.h protocol.h

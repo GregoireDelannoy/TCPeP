@@ -111,13 +111,20 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     
     // ~~ Send an ACK back ~~
     ackpacket ack;
+    ack.ack_dofs = malloc(DOFS_LENGTH * sizeof(uint8_t));
+    for(i = 0; i < DOFS_LENGTH; i++){
+        if(state->numBlock > i){ // If the i-th block is allocated
+            // Include the number of packets received
+            ack.ack_dofs[i] = state->nPacketsInBlock[i];
+        } else {
+            // Otherwise, let it just be zero
+            ack.ack_dofs[i] = 0;
+        }
+    }
+    
     ack.ack_seqNo = packet->seqNo;
     ack.ack_currBlock = state->currBlock;
-    if(state->numBlock > 0){ // Note : we might not have a current block !
-        ack.ack_currDof = state->nPacketsInBlock[0];
-    } else {
-        ack.ack_currDof = 0;
-    }
+    
     countLoss(*state, &loss, &total);
     ack.ack_loss = loss;
     ack.ack_total = total;
@@ -126,6 +133,7 @@ void handleInCoded(decoderstate* state, uint8_t* buffer, int size){
     //ackPacketPrint(ack);
     
     ackPacketToBuffer(ack, ackBuffer, &bufLen);
+    free(ack.ack_dofs);
     
     state->ackToSend = realloc(state->ackToSend, (state->nAckToSend + 1) * sizeof(uint8_t*));
     state->ackToSendSize = realloc(state->ackToSendSize, (state->nAckToSend + 1) * sizeof(int));
@@ -340,11 +348,16 @@ void extractData(decoderstate* state){
 
 
 void decoderStatePrint(decoderstate state){
+    uint16_t lost, total;
     printf("Decoder state : \n");
     printf("\tCurrent block = %u\n", state.currBlock);
     printf("\tNumber of blocks = %d\n", state.numBlock);
     printf("\tBytes to send to the application = %d\n", state.nDataToSend);
     printf("\tACKs to send = %d\n", state.nAckToSend);
+    
+    countLoss(state, &lost, &total);
+    printf("\tLost packets = %u, Total = %u, loss rate = %f\n", lost, total, 1.0 * lost/total);
+    
     printf("\tInnov = %lu ; notInnovCounter = %lu ; notInnovGaloisFirstBlock = %lu ;notInnovGaloisOtherBlock = %lu ; outdated = %lu\n", state.stats_nInnovative, state.stats_nAppendedNotInnovativeCounter, state.stats_nAppendedNotInnovativeGaloisFirstBlock, state.stats_nAppendedNotInnovativeGaloisOtherBlock, state.stats_nOutdated);
 }
 

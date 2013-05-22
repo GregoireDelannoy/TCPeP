@@ -8,6 +8,8 @@
 #define BITMASK_NO    0b01111111
 #define BITMASK_FLAG  0b10000000
 
+#define DOFS_LENGTH 3 // The number of blocks for which we send the number of dofs
+
 typedef struct datapacket_t {
     uint16_t blockNo; // Block number of the packet
     uint8_t packetNumber; // Flag (1bit) | Packet index in block (if uncoded), number of packets used for coding (if coded)
@@ -19,7 +21,7 @@ typedef struct datapacket_t {
 
 typedef struct ackpacket_t {
     uint16_t ack_currBlock; // Smallest undecoded block
-    uint8_t ack_currDof; // Degrees of freedom recovered for the current block
+    uint8_t* ack_dofs; // Degrees of freedom recovered for the blocks
     uint32_t ack_seqNo; // Sequence Number for the currently acknowledged packet
     uint16_t ack_loss;  // Number of lost packets in the seen set
     uint16_t ack_total; // Total number of packets in the seen set

@@ -1,15 +1,13 @@
 #!/bin/bash
 
 # ~~ Parameters ~~
-INTERFACE="eth0"
+INTERFACE="wlan0"
 
-LOSS="1%"
+LOSS="10%"
 LOSS_CORRELATION="25%"
 
-DELAY="150ms"
-DELAY_VARIATION="10ms"
-
-RATE="512kbit"
+DELAY="1ms"
+DELAY_VARIATION="1ms"
 
 
 # ~~ Code ~~
@@ -29,19 +27,19 @@ fi
 echo "Setting the new parameters..."
 modprobe ifb
 # Replace the egress queue by a netem
+echo "netem queue on interface"
 tc qdisc add dev $INTERFACE root handle 1:0 netem
 # Set-up the IDB
+echo "ifb0 up"
 ip link set dev ifb0 up
+echo "add ingress to interface"
 tc qdisc add dev $INTERFACE ingress
-tc filter add dev eth0 parent ffff: protocol ip u32 match u32 0 0 flowid 1:1 action mirred egress redirect dev ifb0
+tc filter add dev $INTERFACE parent ffff: protocol ip u32 match u32 0 0 flowid 1:1 action mirred egress redirect dev ifb0
 tc qdisc add dev ifb0 root handle 1:0 netem
 
 # Apply parameters
 tc qdisc change dev $INTERFACE root netem delay $DELAY $DELAY_VARIATION loss $LOSS $LOSS_CORRELATION
 tc qdisc change dev ifb0 root netem delay $DELAY $DELAY_VARIATION loss $LOSS $LOSS_CORRELATION
-
-tc qdisc add dev $INTERFACE parent 1:1 handle 10: tbf rate $RATE buffer 1600 limit 3000
-tc qdisc add dev ifb0 parent 1:1 handle 10: tbf rate $RATE buffer 1600 limit 3000
 
 # Display queue policies :
 tc -s qdisc

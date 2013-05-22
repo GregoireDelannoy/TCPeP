@@ -60,18 +60,10 @@ void onWindowUpdate(encoderstate* state){
     while((totalInFlight < ((int)state->congestionWindow)) && (sentInThisRound)){
         sentInThisRound = false;
         for(i = 0; i < state->numBlock; i++){
-            //printf("Block %d should receive ~%f packets while %d are known\n", i, (1 - state->p) * nPacketsInFlight[i], state->blocks[i].nPackets);
-            if(( i == 0) && (ceilf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->currDof))){
-                 //~~ Send from the first block ~~
-                //printf("Sending from first block with state->p = %f, npackets in flight = %d, blocks.npacket = %d, currDof = %d\n", state->p, nPacketsInFlight[0], state->blocks[0].nPackets, state->currDof);
-                sendFromBlock(state, i);
-                totalInFlight ++;
-                nPacketsInFlight[i]++;
-                sentInThisRound = true;
-                break;
-            } else if((i != 0) && (ceilf((1 - state->p) * nPacketsInFlight[i])) < state->blocks[i].nPackets){
-                // ~~ Send from the i-th block ~~
-                //printf("Sending from block %d with state->p = %f, npackets in flight = %d, blocks.npacket = %d\n",i, state->p, nPacketsInFlight[i], state->blocks[i].nPackets);
+            //printf("Block %d should receive ~%f packets while %d are known and %u dofs have been ack-ed\n", i, (1 - state->p) * nPacketsInFlight[i], state->blocks[i].nPackets, state->blocks[i].dofs);
+            
+            if((ceilf(((1 - state->p) * nPacketsInFlight[i])) < (state->blocks[i].nPackets - state->blocks[i].dofs))){
+                //printf("Sending from block #%d\n", i);
                 sendFromBlock(state, i);
                 totalInFlight ++;
                 nPacketsInFlight[i]++;
@@ -80,7 +72,7 @@ void onWindowUpdate(encoderstate* state){
             }
         }
         if(totalInFlight == 0){
-            printf("All available data has been transfered to the other side\n");
+            //printf("TotalInFlight = 0 while win = %f => All available data has been transfered to the other side\n", state->congestionWindow);
             state->isOutstandingData = false;
         }
     }
@@ -124,7 +116,7 @@ void handleInClear(encoderstate* state, uint8_t* buffer, int size){
 }
 
 void onTimeOut(encoderstate* state){
-    do_debug("in onTimeOut\n");
+    printf("in onTimeOut\n");
     state->slowStartMode = true;
     state->congestionWindow = BASE_WINDOW;
     state->timeOutCounter++;
@@ -132,7 +124,7 @@ void onTimeOut(encoderstate* state){
     // ~~ Set time for the next timeOut event ~~
     if(state->isOutstandingData){
         gettimeofday(&(state->nextTimeout), NULL);
-        addUSec(&(state->nextTimeout), (state->timeOutCounter * COMPUTING_DELAY) + (state->timeOutCounter * TIMEOUT_FACTOR * state->longTermRttAverage));
+        addUSec(&(state->nextTimeout), (state->timeOutCounter * (COMPUTING_DELAY + (TIMEOUT_FACTOR * state->longTermRttAverage))));
     } else { // No data left to send... let the TO be infinite !
         state->nextTimeout.tv_sec = 0;
         state->nextTimeout.tv_usec = 0;
@@ -147,11 +139,13 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     int i, currentRTT;
     float delta;
     
-    do_debug("ACK received :\n");
+    //printf("ACK received :\n");
+    //ackPacketPrint(*ack);
     
     // Arbitrary idea : if ACK < seqNo_una (= sequence already ACKed somehow) => Do not consider it
     if(ack->ack_seqNo < state->seqNo_Una){
         do_debug("Outdated ACK (n = %d while una = %d), Drop !\n", ack->ack_seqNo, state->seqNo_Una);
+        free(ack->ack_dofs);
         free(ack);
         return;
     }
@@ -163,6 +157,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
         // The specified sequence number is unknown... better ignore this ACK !
         do_debug("Unknown/outdated sequence number, do not refresh parameters !\n");
         state->seqNo_Una = max(state->seqNo_Una, ack->ack_seqNo + 1);
+        free(ack->ack_dofs);
         free(ack);
         return;
     }
@@ -200,9 +195,12 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
             }
         }
         state->currBlock++;
-        state->currDof = ack->ack_currDof;
     }
-    state->currDof = max(state->currDof, ack->ack_currDof);
+    for(i = 0; i < DOFS_LENGTH; i++){
+        if(state->numBlock > i){
+            state->blocks[i].dofs = max(state->blocks[i].dofs, ack->ack_dofs[i]);
+        }
+    }
     
     
     // ~~ Update Congestion window ~~
@@ -216,10 +214,10 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
         delta = 1 - (state->longTermRttAverage / state->shortTermRttAverage);
         if(delta < ALPHA){
             // Increase the window :
-            state->congestionWindow += (1.0 / state->congestionWindow);
+            state->congestionWindow += (INCREMENT / state->congestionWindow);
         } else if(delta > BETA) {
             // Decrease the window
-            state->congestionWindow -= (1.0 / state->congestionWindow);
+            state->congestionWindow -= (INCREMENT / state->congestionWindow);
         }
         // If delta is in between, do not update the window
         
@@ -232,12 +230,7 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     
     state->seqNo_Una = max(state->seqNo_Una, ack->ack_seqNo + 1);
     
-    // ~~ Set time for the next timeOut event ~~
-    state->nextTimeout.tv_sec = state->time_lastAck.tv_sec;
-    state->nextTimeout.tv_usec = state->time_lastAck.tv_usec;
-    addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->longTermRttAverage);
-    state->timeOutCounter = 0;
-        
+    free(ack->ack_dofs);
     free(ack);
     
     if(state->congestionWindow > MAX_WINDOW){
@@ -246,6 +239,17 @@ void onAck(encoderstate* state, uint8_t* buffer, int size){
     }
     
     onWindowUpdate(state);
+    
+    // ~~ Set time for the next timeOut event ~~
+    if(state->isOutstandingData){
+        state->nextTimeout.tv_sec = state->time_lastAck.tv_sec;
+        state->nextTimeout.tv_usec = state->time_lastAck.tv_usec;
+        addUSec(&(state->nextTimeout), TIMEOUT_FACTOR * state->shortTermRttAverage);
+    } else { // No data left to send... let the TO be infinite !
+        state->nextTimeout.tv_sec = 0;
+        state->nextTimeout.tv_usec = 0;
+    }
+    state->timeOutCounter = 0;
 }
 
 encoderstate* encoderStateInit(){
@@ -264,7 +268,6 @@ encoderstate* encoderStateInit(){
     ret->seqNo_Una = 0;
     ret->congestionWindow = BASE_WINDOW;
     ret->currBlock = 0;
-    ret->currDof = 0;
     ret->slowStartMode = true;
     ret->dataToSend = 0;
     ret->dataToSendSize = 0;
@@ -372,6 +375,8 @@ block blockCreate(){
         b.isSentPacket[i] = false;
     }
     
+    b.dofs = 0;
+    
     return b;
 }
 
@@ -478,7 +483,6 @@ void encoderStatePrint(encoderstate state){
     printf("\tCurrent block = %u\n", state.currBlock);
     printf("\tNumber of blocks = %d\n", state.numBlock);
     printf("\tEncoded data to send = %d\n", state.nDataToSend);
-    printf("\tCurrent Degrees of Freedom = %u\n", state.currDof);
     printf("\tCongestion window = %f\n", state.congestionWindow);
     printf("\tlong-term RTT = %f\n", state.longTermRttAverage);
     printf("\tshort-term RTT = %f\n", state.shortTermRttAverage);

@@ -11,7 +11,7 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 100000
+#define CLEAR_PACKETS 200
 #define LOSS 0.1
 #define INPUT_LENGTH 3000
 
@@ -116,7 +116,7 @@ int codingTest(){
         //}
 
         //sendSize = (int)(((0.8 + 0.2 *random())/RAND_MAX) * INPUT_LENGTH);
-        sendSize = PACKETSIZE - 10;
+        sendSize = PACKETSIZE - 20;
         //printf("Adding %d to the encoder\n", sendSize);
         handleInClear(encState, inputBuffer, sendSize);
         totalBytesReceived += sendSize;

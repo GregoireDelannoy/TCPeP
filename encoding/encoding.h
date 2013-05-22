@@ -7,13 +7,14 @@
 #define BASE_WINDOW 5.0 // Number of tokens to start with
 #define SS_THRESHOLD 15.0 // Slow start threshold
 #define MAX_WINDOW 5000 // Should not be needed...
-#define SMOOTHING_FACTOR_LONG 0.001 // Smoothing factor for the long term average
+#define SMOOTHING_FACTOR_LONG 0.0001 // Smoothing factor for the long term average
 #define SMOOTHING_FACTOR_SHORT 0.1 // Smoothing factor for the short term average
-#define TIMEOUT_FACTOR 5 // Timeout = factor * rtt
-#define INFLIGHT_FACTOR 1.2 // Gamma from the papers
-#define COMPUTING_DELAY  1000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is low (LAN for example)
-#define ALPHA 0.05 
-#define BETA 0.2   // Alpha and Beta are Thresholds for the congestion-control algorithm
+#define TIMEOUT_FACTOR 50 // Timeout = factor * rtt
+#define INFLIGHT_FACTOR 1.3 // Gamma from the papers
+#define COMPUTING_DELAY  1000 // Time taken by the coding operations, estimation in uSeconds. Becomes important if the link RTT is very low (LAN or VMs for example)
+#define ALPHA 0.05
+#define BETA 0.2  // Alpha and Beta are Thresholds for the congestion-control algorithm
+#define INCREMENT 5.0 // The increment factor for modifying the CWN
 
 typedef struct packetsentinfo_t{
     uint32_t seqNo;
@@ -26,6 +27,8 @@ typedef struct block_t{
     
     int nPackets; // Number of packets allocated
     int isSentPacket[BLKSIZE]; // True if a packet has already been sent uncoded
+    
+    uint8_t dofs; // Already received degrees of freedom for the block
 } block;
 
 typedef struct encoderstate_t {
@@ -42,7 +45,6 @@ typedef struct encoderstate_t {
     struct timeval time_lastAck;
     float congestionWindow; // Maximum number of packets in flight
     uint16_t currBlock; // Current block (not yet acked) => Block 0 in the matrix table
-    uint8_t currDof; // Degrees of freedom for current block
     int slowStartMode;
     int timeOutCounter;
     

@@ -272,12 +272,6 @@ int main(int argc, char *argv[]) {
                     onAck((*muxTable)[nMux].encoderState, tmp, dstLen);
                 } else if(type == TYPE_CLOSE){
                     printf("TYPE_CLOSE ; closing mux #%d.\n", nMux);
-                    if((*muxTable)[nMux].sock_fd != -1){ // Make sure that the file descriptor really points to something
-                        if(close((*muxTable)[nMux].sock_fd) != 0){ // Try to close
-                            perror("In tcpep.c close() :");
-                            exit(1); // DIE !
-                        }
-                    }
                     removeMux(nMux, muxTable, &muxTableLength);
                 } else {
                     do_debug("Received packet did not make sense for mux #%d\n", nMux);
@@ -320,14 +314,8 @@ int main(int argc, char *argv[]) {
         
         for(i = 0; i<muxTableLength;i++){
             if(FD_ISSET((*muxTable)[i].sock_fd, &rd_set)){
-                if((nread = cread((*muxTable)[i].sock_fd, buffer, BUFSIZE)) <= 0){
-                    printf("Mux #%d is flagged for closing\n", i);
-                    if((*muxTable)[i].sock_fd != -1){ // Make sure that the file descriptor is ok
-                        if(close((*muxTable)[i].sock_fd) != 0){
-                            perror("in tcpep.c : close()");
-                        }
-                        (*muxTable)[i].sock_fd = -1;
-                    }
+                if((nread = cread((*muxTable)[i].sock_fd, buffer, BUFSIZE)) == 0){
+                    printf("Mux #%d : read has returned %d ; close the socket and flag for closing\n", i, nread);
                     (*muxTable)[i].state = STATE_CLOSEAWAITING;
                 } else {
                     do_debug("Mux #%d has received %d bytes from the TCP socket\n", i, nread);
@@ -418,7 +406,8 @@ int main(int argc, char *argv[]) {
             if(((*muxTable)[i].state == STATE_CLOSEAWAITING)){
                 printf("Mux #%d is awaiting close\n", i);
                 if(!((*muxTable)[i].encoderState->isOutstandingData)){
-                    printf("Destroying Mux %d\n", i);
+                    printf("Destroying Mux %d after CLOSEAWAITING\n", i);
+                    
                     bufferToMuxed(buffer, tmp, 0, &dstLen, (*muxTable)[i], TYPE_CLOSE);
                     udpSend(udpSock_fd, tmp, dstLen, (struct sockaddr*)&((*muxTable)[i].udpRemote));
                     removeMux(i, muxTable, &muxTableLength);

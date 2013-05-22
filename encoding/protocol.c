@@ -67,6 +67,16 @@ void removeMux(int index, muxstate** statesTable, int* tableLength){
         exit(1);
     } else {
         int i;
+        
+        if((*statesTable)[index].sock_fd != -1){ // Make sure that the file descriptor really points to something
+            if(close((*statesTable)[index].sock_fd) != 0){ // Try to close
+                perror("In removeMux : error while close()ing");
+                exit(1); // DIE !
+            }
+        } else {
+            printf("Removing a Mux whithout opened socket (fd == -1)\n");
+        }
+        
         encoderStateFree((*statesTable)[index].encoderState);
         decoderStateFree((*statesTable)[index].decoderState);
         for(i = index; i < ((*tableLength) - 1); i++){
