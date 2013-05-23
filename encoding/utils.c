@@ -33,7 +33,7 @@ int cread(int fd, uint8_t *buf, int n){
 
     if((nread=read(fd, buf, n)) < 0){
         perror("in utils.c : Reading data");
-        exit(1);
+        return -1;
     }
     return nread;
 }

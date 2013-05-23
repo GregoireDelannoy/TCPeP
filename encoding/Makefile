@@ -5,8 +5,8 @@ CFLAGS = -Wall -lm -Ofast   # Prod
 
 VFLAGS = --track-origins=yes --leak-check=full --show-reachable=yes
 
-OBJ = galois_field.o matrix.o  packet.o encoding.o decoding.o utils.o protocol.o
-HDR = galois_field.h  matrix.h  packet.h  utils.h encoding.h decoding.h protocol.h
+OBJ = galois_field.o matrix.o  packet.o encoding.o decoding.o utils.o protocol.o looper.o
+HDR = galois_field.h  matrix.h  packet.h  utils.h encoding.h decoding.h protocol.h looper.h
 
 %.o: %.c $(HDR)
 	$(CC) $(CFLAGS) -c $<

@@ -125,9 +125,11 @@ void onTimeOut(encoderstate* state){
     if(state->isOutstandingData){
         gettimeofday(&(state->nextTimeout), NULL);
         addUSec(&(state->nextTimeout), (state->timeOutCounter * (COMPUTING_DELAY + (TIMEOUT_FACTOR * state->longTermRttAverage))));
-    } else { // No data left to send... let the TO be infinite !
+    } else { // No data left to send... let the TO be ~long !
         state->nextTimeout.tv_sec = 0;
         state->nextTimeout.tv_usec = 0;
+        
+        addUSec(&(state->nextTimeout), (1 + state->timeOutCounter) * TIMEOUT_INCREMENT);
     }
     
     onWindowUpdate(state);

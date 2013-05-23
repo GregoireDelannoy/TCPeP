@@ -16,6 +16,8 @@
 #define BETA 0.2  // Alpha and Beta are Thresholds for the congestion-control algorithm
 #define INCREMENT 5.0 // The increment factor for modifying the CWN
 
+#define TIMEOUT_INCREMENT 500000
+
 typedef struct packetsentinfo_t{
     uint32_t seqNo;
     uint16_t blockNo;

@@ -11,7 +11,7 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 200
+#define CLEAR_PACKETS 10
 #define LOSS 0.1
 #define INPUT_LENGTH 3000
 
@@ -199,6 +199,21 @@ int codingTest(){
     return true;
 }
 
+int statesTest(){
+    muxstate** muxTable = malloc(sizeof(muxstate*));
+    *muxTable = 0;
+    int tableLength = 0;
+    struct sockaddr_in udpRemoteAddr;
+    memset(&udpRemoteAddr, 0, sizeof(udpRemoteAddr));
+    
+    assignMux((uint16_t)random(), (uint16_t)random(), (uint32_t)random(), (uint16_t)random(), 0, muxTable, &tableLength, udpRemoteAddr);
+    printMux((*muxTable)[0]);
+    removeMux(0, muxTable, &tableLength);
+    
+    free(muxTable);
+    return true;
+}
+
 int codingPerf(){
     matrix *a = getRandomMatrix(500,127), *b = getRandomMatrix(127,13800), *result;
     int i, nbRounds = 1;
@@ -229,8 +244,9 @@ int codingPerf(){
 }
 
 int main(int argc, char **argv){
-    if(codingTest()){
-    //if(galoisTest() && matrixTest() && maxMinTest() && codingTest()){
+    //if(codingTest()){
+    if(statesTest()){
+    //if(galoisTest() && matrixTest() && maxMinTest() && codingTest() && statesTest()){
         printf("All test passed.\n");
         return 0;
     } else {
