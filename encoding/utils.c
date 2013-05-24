@@ -1,8 +1,23 @@
+/* Copyright 2013 Gregoire Delannoy
+ * 
+ * This file is a part of TCPep.
+ * 
+ * TCPeP is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ */
+
 #include "utils.h"
 
-/**************************************************************************
- * do_debug: prints debugging stuff (doh!)                                                                *
- **************************************************************************/
 void do_debug(char *msg, ...){
     va_list argp;
     
@@ -13,9 +28,6 @@ void do_debug(char *msg, ...){
     }
 }
 
-/**************************************************************************
- * my_err: prints custom error messages on stderr.                                                *
- **************************************************************************/
 void my_err(char *msg, ...) {
     va_list argp;
     
@@ -24,10 +36,6 @@ void my_err(char *msg, ...) {
     va_end(argp);
 }
 
-/**************************************************************************
- * cread: read routine that checks for errors and exits if an error is        *
- *                returned.                                                                                                             *
- **************************************************************************/
 int cread(int fd, uint8_t *buf, int n){
     int nread;
 
@@ -38,7 +46,6 @@ int cread(int fd, uint8_t *buf, int n){
     return nread;
 }
 
-// Send to UDP socket
 int udpSend(int fd, uint8_t *buf, int n, struct sockaddr* remote){
     int ret = sendto(fd, buf, n, 0, remote, 16);
     if( n != ret){
@@ -48,10 +55,6 @@ int udpSend(int fd, uint8_t *buf, int n, struct sockaddr* remote){
     return ret;
 }
 
-/**************************************************************************
- * cwrite: write routine that checks for errors and exits if an error is    *
- *                 returned.                                                                                                            *
- **************************************************************************/
 int cwrite(int fd, uint8_t *buf, int n){
     int nwrite, totalWrite = 0;
 
