@@ -29,7 +29,7 @@
 #include "protocol.h"
 
 
-#define CLEAR_PACKETS 10
+#define CLEAR_PACKETS 1000
 #define LOSS 0.1
 #define INPUT_LENGTH 3000
 
@@ -61,8 +61,7 @@ int galoisTest(){
 }
 
 int matrixTest(){
-    int isOk = true;
-    matrix* a, *b, *identity, *result, *result1;
+    matrix* a, *b;
     
     // Create & Destroy Matrices
     a = getRandomMatrix(1000,1000);
@@ -70,33 +69,9 @@ int matrixTest(){
     mFree(a);
     mFree(b);
     
-    
-    // Gaussian elimination
-    a = getRandomMatrix(4, 4);
-    identity = getIdentityMatrix(4);
-    b = mGauss(*a);
-    result = mMul(*a, *b);
-    result1 = mMul1(*a, *b);
-    
-    if(!mEqual(*result, *result1)){
-        printf("Mult algos are different !\n");
-        mPrint(*a);
-        mPrint(*b);
-        mPrint(*result);
-        mPrint(*result1);
-        isOk = false;
-    }
-    
-    if(!mEqual(*identity, *result)){
-        printf("matrix gauss or multiplication failed\n");
-        isOk = false;
-    }
-    
-    mFree(a);mFree(b);mFree(identity);mFree(result);mFree(result1);
-    
     mFree(mCreate(0,0));
     
-    return isOk;
+    return true;
 }
 
 int maxMinTest(){
@@ -232,38 +207,9 @@ int statesTest(){
     return true;
 }
 
-int codingPerf(){
-    matrix *a = getRandomMatrix(500,127), *b = getRandomMatrix(127,13800), *result;
-    int i, nbRounds = 1;
-    struct timeval startTime, endTime;
-    
-    printf("Normal algo : ");
-    gettimeofday(&startTime, NULL);
-    for(i = 0; i < nbRounds; i++){
-        result = mMul1(*a, *b);
-        mFree(result);
-    }
-    gettimeofday(&endTime, NULL);
-    printf(" %lu\n", (1000000 * (endTime.tv_sec - startTime.tv_sec)) + (endTime.tv_usec - startTime.tv_usec));
-    
-    printf("Memory Wise : ");
-    gettimeofday(&startTime, NULL);
-    for(i = 0; i < nbRounds; i++){
-        result = mMul(*a, *b);
-        mFree(result);
-    }
-    gettimeofday(&endTime, NULL);
-    printf(" %lu\n", (1000000 * (endTime.tv_sec - startTime.tv_sec)) + (endTime.tv_usec - startTime.tv_usec));
-    
-    
-    mFree(a);
-    mFree(b);
-    return true; 
-}
-
 int main(int argc, char **argv){
-    //if(codingTest()){
-    if(statesTest()){
+    if(codingTest()){
+    //if(statesTest()){
     //if(galoisTest() && matrixTest() && maxMinTest() && codingTest() && statesTest()){
         printf("All test passed.\n");
         return 0;

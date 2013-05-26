@@ -98,32 +98,6 @@ void mFree(matrix* m){
     free(m);
 }
 
-// mMul standard
-matrix* mMul1(matrix a, matrix b){
-    int i, j, k;
-    matrix* resultMatrix;
-    uint8_t tmp;
-
-    // Check dimension correctness
-    if(a.nColumns != b.nRows){
-        printf("mMul : Error in Matrix dimensions. Cannot continue\n");
-        exit(1);
-    }
-
-    resultMatrix = mCreate(a.nRows, b.nColumns);
-
-    for(i = 0; i < resultMatrix->nRows; i++){
-        for(j = 0; j < resultMatrix->nColumns; j++){
-            tmp = 0;
-            for(k = 0; k < a.nColumns; k++){
-                tmp = gadd(tmp, gmul(a.data[i][k], b.data[k][j]));
-            } 
-            resultMatrix->data[i][j] = tmp;
-        }
-    }
-    return resultMatrix;
-}
-
 // mMul memory-wise
 matrix* mMul(matrix a, matrix b){
     int i, j, k;
@@ -167,41 +141,6 @@ matrix* mCopy(matrix orig){
     return resultMatrix;
 }
 
-matrix* mGauss(matrix m){
-    int h,i, j;
-    uint8_t temp;
-    matrix* origMatrix = mCopy(m);
-    matrix* resultMatrix = getIdentityMatrix(m.nRows);
-
-    if(m.nRows != m.nColumns){
-        printf("Should give square matrix ! DIE.\n");
-        exit(1);
-    }
-
-    for(h = 0; h < m.nRows ; h++){
-        // Make the first number 1
-        temp = origMatrix->data[h][h];
-        for(j = 0 ; j < m.nRows; j++){
-            origMatrix->data[h][j] = gdiv(origMatrix->data[h][j], temp);
-            resultMatrix->data[h][j] = gdiv(resultMatrix->data[h][j], temp);
-        }
-
-        // Eliminate others
-        for(i = 0; i < m.nRows; i++){
-            if(i != h){ // We do not want to eliminate ourselves !
-                temp = origMatrix->data[i][h];
-                for(j = 0 ; j < m.nRows; j++){
-                    origMatrix->data[i][j] = gsub(origMatrix->data[i][j], gmul(temp, origMatrix->data[h][j]));
-                    resultMatrix->data[i][j] = gsub(resultMatrix->data[i][j], gmul(temp, resultMatrix->data[h][j]));
-                }
-            }
-        }
-    }
-
-    mFree(origMatrix);
-    return resultMatrix;
-}
-
 int mEqual(matrix a, matrix b){
     int i,j;
     // Test dimensions
@@ -221,27 +160,6 @@ int mEqual(matrix a, matrix b){
     // No difference has been found, return true.
     return true;
 }
-
-void mAppendVector(matrix* m, uint8_t* v){
-    // Append a vector v at the bottom of a matrix.
-    m->data = realloc(m->data, sizeof(uint8_t*) * (m->nRows + 1));
-    m->data[m->nRows] = v;
-    m->nRows++; 
-}
-
-// Expand a matrix width to the requested size
-void mGrow(matrix* m, int newColumnSize){
-    if(newColumnSize > m->nColumns){
-        int i;
-        for(i=0; i<m->nRows; i++){
-            m->data[i] = realloc(m->data[i], newColumnSize * sizeof(uint8_t));
-            memset(m->data[i] + m->nColumns, 0x00, newColumnSize - m->nColumns);
-        }
-        
-        m->nColumns = newColumnSize;
-    }
-}
-
 
 void rowReduce(uint8_t* row, uint8_t factor, int size){
     // Reduce a row st row[i] = row[i] / factor

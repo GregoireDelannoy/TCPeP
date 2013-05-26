@@ -42,11 +42,8 @@ void mPrint(matrix m);
 void mFree(matrix* m);
 
 matrix* mMul(matrix a, matrix b);
-matrix* mMul1(matrix a, matrix b);
 
 matrix* mCopy(matrix orig);
-
-matrix* mGauss(matrix m);
 
 int mEqual(matrix a, matrix b);
 
@@ -55,7 +52,4 @@ void mAppendVector(matrix* m, uint8_t* v);
 void rowReduce(uint8_t* row, uint8_t factor, int size);
 
 void rowMulSub(uint8_t* a, uint8_t* b, uint8_t coeff, int size);
-
-void mGrow(matrix* m, int newColumnSize);
-
 #endif
