@@ -1,6 +1,6 @@
 /* Copyright 2013 Gregoire Delannoy
  * 
- * This file is a part of TCPep.
+ * This file is a part of TCPeP.
  * 
  * TCPeP is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

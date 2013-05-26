@@ -3,7 +3,7 @@
  * This file use some data and algorithms provided by Sam Trenholme
  * on the URL : http://www.samiam.org/galois.html
  * 
- * This file is a part of TCPep.
+ * This file is a part of TCPeP.
  * 
  * TCPeP is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
