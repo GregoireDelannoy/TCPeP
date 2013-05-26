@@ -481,19 +481,22 @@ void sendFromBlock(encoderstate* state, int blockNo){
     free(packet.payloadAndSize);
 }
 
+/* Using nPackets from data, generate the coefficients and write the encoded information in buffer */
 void generateEncodedPayload(matrix data, int nPackets, uint32_t seed, uint8_t* buffer, int* bufLen){
     srandom(seed); // Initialize the PRNG with seed value
-    matrix* coeffs = getRandomMatrix(1, nPackets);
-    matrix* tmp = mCopy(data);
-    tmp->nRows = nPackets;
+    matrix* coeffs = getRandomMatrix(1, nPackets); // Generate the coefficients
+    int origDataNRows = data.nRows; // Save the original state from data
+    data.nRows = nPackets; // Alter it artificially for the multiplication to be ok
     
-    matrix* result = mMul(*coeffs, *tmp);
+    matrix* result = mMul(*coeffs, data); // Perform the multiplication
     
+    // Copy the result to the buffer
     memcpy(buffer, result->data[0], result->nColumns);
     *bufLen = result->nColumns;
     
-    tmp->nRows = data.nRows;
-    mFree(tmp);
+    data.nRows = origDataNRows; // Restore data state
+    
+    // Free the newly allocated matrices
     mFree(coeffs);
     mFree(result);
 }
