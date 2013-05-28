@@ -31,6 +31,10 @@ void sendFromBlock(encoderstate* state, int blockNo);
 
 void generateEncodedPayload(matrix data, int nPackets, uint32_t seed, uint8_t* buffer, int* bufLen);
 
+int isMoreDataOk(encoderstate state){
+    return (state.numBlock < MAX_BLOCKS);
+}
+
 void onWindowUpdate(encoderstate* state){
     //printf("in onWindowUpdate\n");
     if(!state->isOutstandingData){

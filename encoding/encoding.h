@@ -23,7 +23,7 @@
 #include "matrix.h"
 
 #define BASE_WINDOW 5.0 // Number of tokens to start with
-#define SS_THRESHOLD 15.0 // Slow start threshold
+#define SS_THRESHOLD 10.0 // Slow start threshold
 #define MAX_WINDOW 5000 // Should not be needed...
 #define SMOOTHING_FACTOR_LONG 0.0001 // Smoothing factor for the long term average
 #define SMOOTHING_FACTOR_SHORT 0.1 // Smoothing factor for the short term average
@@ -35,6 +35,7 @@
 #define INCREMENT 5.0 // The increment factor for modifying the CWN
 
 #define TIMEOUT_INCREMENT 500000
+#define MAX_BLOCKS 15 // Maximum number of blocks to store in memory
 
 typedef struct packetsentinfo_t{
     uint32_t seqNo;
@@ -87,5 +88,7 @@ encoderstate* encoderStateInit();
 void encoderStateFree(encoderstate* state);
 
 void encoderStatePrint(encoderstate state);
+
+int isMoreDataOk(encoderstate state);
 
 #endif

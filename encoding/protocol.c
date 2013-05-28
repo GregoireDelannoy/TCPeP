@@ -31,9 +31,6 @@ void printMux(muxstate mux){
         case STATE_INIT:
             printf("\tState init\n");
             break;
-        case STATE_CLOSEAWAITING:
-            printf("\tState openackawaiting\n");
-            break;
         case STATE_OPENED_DUPLEX:
             printf("\tState opened duplex\n");
             break;
@@ -78,6 +75,12 @@ int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, uint16_t rando
     (*statesTable)[(*tableLength) - 1].encoderState = encoderStateInit();
     (*statesTable)[(*tableLength) - 1].decoderState = decoderStateInit();
     (*statesTable)[(*tableLength) - 1].state = STATE_INIT;
+    (*statesTable)[(*tableLength) - 1].localSocketReadState = SOCKET_INIT;
+    (*statesTable)[(*tableLength) - 1].localSocketWriteState = SOCKET_INIT;
+    (*statesTable)[(*tableLength) - 1].remoteSocketReadState = SOCKET_OPENED;
+    (*statesTable)[(*tableLength) - 1].remoteSocketWriteState = SOCKET_OPENED;
+    (*statesTable)[(*tableLength) - 1].isRemoteOutstandingData = true;
+    (*statesTable)[(*tableLength) - 1].noOutstandingData = SOCKET_OPENED;
     
     memset(&((*statesTable)[(*tableLength) - 1].udpRemote), 0, sizeof((*statesTable)[(*tableLength) - 1].udpRemote));
     (*statesTable)[(*tableLength) - 1].udpRemote.sin_family = AF_INET;
@@ -155,9 +158,14 @@ int muxedToBuffer(uint8_t* src, uint8_t* dst, int srcLen, int* dstLen, muxstate*
         mux->randomId = ntohs(tmp16);
         if(  (*type == TYPE_ACK) // Test if the buffer indicates a legitimate type
           || (*type == TYPE_CLOSE)
-          || (*type == TYPE_CLOSEAWAITING)
           || (*type == TYPE_DATA)
           || (*type == TYPE_EMPTY)
+          || (*type == TYPE_READ_CLOSED)
+          || (*type == TYPE_READ_CLOSED_ACK)
+          || (*type == TYPE_WRITE_CLOSED)
+          || (*type == TYPE_WRITE_CLOSED_ACK)
+          || (*type == TYPE_NO_OUTSTANDING_DATA)
+          || (*type == TYPE_NO_OUTSTANDING_DATA_ACK)
         ){
             memcpy(dst, src + 11, srcLen - 11);
             (*dstLen) = srcLen - 11;

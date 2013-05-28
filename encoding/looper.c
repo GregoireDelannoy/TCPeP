@@ -21,7 +21,7 @@
 
 void handleIncomingTcpConnected(int sock_fd, muxstate* mux);
 void handleIncomingTcpListener(int sock_fd, muxstate** muxTable, int* muxTableLength, struct sockaddr_in remote);
-void handleIncomingUdp(int sock_fd, muxstate** muxTable, int* muxTableLength, int cliproxy);
+void handleIncomingUdp(int sock_fd, muxstate** muxTable, int* muxTableLength, int cliproxy, globalstate* state);
 
 void initializeNetwork(globalstate* state){
     struct sockaddr_in local;
@@ -109,26 +109,29 @@ void infiniteWaitLoop(globalstate* state){
     int muxTableLength = 0;
     
     while(1) {
-        /* Setting timeout values + max fd */
-        maxfd = 0;
+        /* Preparing select() arguments */
+        maxfd = 0; // Init the fd set
         FD_ZERO(&rd_set);
-        if(state->cliproxy == CLIENT){
+        if(state->cliproxy == CLIENT){ // If we are client, add the listener TCP socket
             FD_SET(state->tcpListenerSock_fd, &rd_set);
             maxfd = max(maxfd, state->tcpListenerSock_fd);
         }
+        
+        // UDP socket
         FD_SET(state->udpSock_fd, &rd_set);
         maxfd = max(maxfd, state->udpSock_fd);
         
+        // Timeout values
         gettimeofday(&currentTime, NULL);
         timeOut.tv_sec = currentTime.tv_sec + 10000000;
         timeOut.tv_usec = 0;
         for(i = 0; i < muxTableLength; i++){
-            if(((*muxTable)[i].state == STATE_OPENED_DUPLEX) || ((*muxTable)[i].state == STATE_OPENED_SIMPLEX)){
+            if((*muxTable)[i].localSocketReadState == SOCKET_OPENED){ // Local sockets ok to read from
                 FD_SET((*muxTable)[i].sock_fd, &rd_set);
                 maxfd = max(maxfd, (*muxTable)[i].sock_fd);
             }
             
-            // Get the first to timeout
+            // Get the first to timeout, in order to set select()'s arguments
             if(isSooner((*muxTable)[i].encoderState->nextTimeout, timeOut)){
                 do_debug("TO for mux #%d (%d,%d) is sooner !\n", i, (int)(*muxTable)[i].encoderState->nextTimeout.tv_sec, (int)(*muxTable)[i].encoderState->nextTimeout.tv_usec);
                 timeOut.tv_sec = (*muxTable)[i].encoderState->nextTimeout.tv_sec;
@@ -136,7 +139,7 @@ void infiniteWaitLoop(globalstate* state){
             }
         }
 
-        
+        // Process the relative delay instead of absolute times
         if(timeOut.tv_sec - currentTime.tv_sec > 0){
             timeOut.tv_sec = timeOut.tv_sec - currentTime.tv_sec;
             if(timeOut.tv_usec - currentTime.tv_usec > 0){
@@ -170,7 +173,7 @@ void infiniteWaitLoop(globalstate* state){
 
         if(FD_ISSET(state->udpSock_fd, &rd_set)) {
             do_debug("Incoming UDP data\n");
-            handleIncomingUdp(state->udpSock_fd, muxTable, &muxTableLength, state->cliproxy);
+            handleIncomingUdp(state->udpSock_fd, muxTable, &muxTableLength, state->cliproxy, state);
         }
         
         if((state->cliproxy == CLIENT) && (FD_ISSET(state->tcpListenerSock_fd, &rd_set))){
@@ -185,7 +188,7 @@ void infiniteWaitLoop(globalstate* state){
             }
         }
         
-        //Send data and acks
+        /* Process DATA, ACKs, data to the application, and state variations */
         for(i = 0; i<muxTableLength;i++){
             //DEBUG :
             if(regulator()){
@@ -193,17 +196,17 @@ void infiniteWaitLoop(globalstate* state){
                 printMux((*muxTable)[i]);
             }
             
-            // Send data to the application
-            if(((*muxTable)[i].state != STATE_CLOSEAWAITING) && ((*muxTable)[i].decoderState->nDataToSend > 0)){
+            // Send data to the application through local TCP socket
+            if(((*muxTable)[i].localSocketWriteState == SOCKET_OPENED) && ((*muxTable)[i].decoderState->nDataToSend > 0)){
                 nwrite = cwrite((*muxTable)[i].sock_fd, (*muxTable)[i].decoderState->dataToSend, (*muxTable)[i].decoderState->nDataToSend);
                 do_debug("Sent %d decoded bytes to the application\n", nwrite);
                 free((*muxTable)[i].decoderState->dataToSend);
                 
-                if(nwrite != (*muxTable)[i].decoderState->nDataToSend){ // Error while sending to the application ; we'd better close that mux
-                    printf("Error while sending to the application for mux #%d ; closing\n", i);
-                    sendControlPacket((*muxTable)[i], TYPE_CLOSE, state->udpSock_fd);
-                    removeMux(i, muxTable, &muxTableLength);
-                    i--; // Go back in the for loop, because of the sliding induced by removeMux();
+                if(nwrite != (*muxTable)[i].decoderState->nDataToSend){ // Error while sending to the application
+                    printf("Error while sending to the application for mux #%d\n", i);
+                    (*muxTable)[i].localSocketWriteState = SOCKET_CLOSED_NOT_ACKNOWLDGED;
+                    (*muxTable)[i].decoderState->dataToSend = 0;
+                    (*muxTable)[i].decoderState->nDataToSend = 0;
                     break;
                 }
                 
@@ -233,10 +236,19 @@ void infiniteWaitLoop(globalstate* state){
             if(((*muxTable)[i].state == STATE_OPENED_SIMPLEX) && (*muxTable)[i].encoderState->nDataToSend == 0){
                 do_debug("No data to send and state simplex => Send a TYPE_EMPTY\n");
                 sendControlPacket((*muxTable)[i], TYPE_EMPTY, state->udpSock_fd);
+                (*muxTable)[i].encoderState->nextTimeout.tv_sec = currentTime.tv_sec;
+                (*muxTable)[i].encoderState->nextTimeout.tv_usec = currentTime.tv_usec;
+                addUSec(&((*muxTable)[i].encoderState->nextTimeout), 500000); // Add 500ms to the next timeout
             }
             
             // Send coded data packets from the encoder
-            if(((*muxTable)[i].state == STATE_OPENED_DUPLEX) || ((*muxTable)[i].state == STATE_CLOSEAWAITING) || ((*muxTable)[i].state == STATE_OPENED_SIMPLEX)){
+            if(
+            (
+                ((*muxTable)[i].state == STATE_OPENED_DUPLEX) ||
+                ((*muxTable)[i].state == STATE_OPENED_SIMPLEX)
+            ) &&
+            ((*muxTable)[i].remoteSocketWriteState = SOCKET_OPENED) // No point in sending if the receiver will not accept !
+            ){
                 for(j = 0; j < (*muxTable)[i].encoderState->nDataToSend; j++){
                     bufferToMuxed((*muxTable)[i].encoderState->dataToSend[j], buffer, (*muxTable)[i].encoderState->dataToSendSize[j], &dstLen, (*muxTable)[i], TYPE_DATA);
                     nwrite = udpSend(state->udpSock_fd, buffer, dstLen, (struct sockaddr*)&((*muxTable)[i].udpRemote));
@@ -255,23 +267,50 @@ void infiniteWaitLoop(globalstate* state){
                 }
             }
             
-            if(((*muxTable)[i].state == STATE_CLOSEAWAITING)){
-                printf("Mux #%d is awaiting close\n", i);
-                if(!((*muxTable)[i].encoderState->isOutstandingData)){
-                    printf("Destroying Mux %d after CLOSEAWAITING\n", i);
-                    sendControlPacket((*muxTable)[i], TYPE_CLOSE, state->udpSock_fd);
-                    removeMux(i, muxTable, &muxTableLength);
-                    i--; // Go back in the for loop, because of the sliding induced by removeMux();
-                } else {
-                    printf("Still outstanding data to send ; trigger a timeout.\n");
-                    onTimeOut((*muxTable)[i].encoderState);
-                }
+            // Inform the remote endpoint of any changes that he would need to know
+            if((*muxTable)[i].localSocketReadState == SOCKET_CLOSED_NOT_ACKNOWLDGED){
+                sendControlPacket((*muxTable)[i], TYPE_READ_CLOSED, state->udpSock_fd);
             }
+            if((*muxTable)[i].localSocketWriteState == SOCKET_CLOSED_NOT_ACKNOWLDGED){
+                sendControlPacket((*muxTable)[i], TYPE_WRITE_CLOSED, state->udpSock_fd);
+            }
+            if(
+            (((*muxTable)[i].localSocketReadState == SOCKET_CLOSED_NOT_ACKNOWLDGED) || ((*muxTable)[i].localSocketReadState == SOCKET_CLOSED_ACKNOWLDGED)) &&
+            (!((*muxTable)[i].encoderState->isOutstandingData)) &&
+            ((*muxTable)[i].noOutstandingData != SOCKET_CLOSED_ACKNOWLDGED)
+            ){
+                (*muxTable)[i].noOutstandingData = SOCKET_CLOSED_NOT_ACKNOWLDGED;
+                sendControlPacket((*muxTable)[i], TYPE_NO_OUTSTANDING_DATA, state->udpSock_fd);
+            }
+            
+            // Check for states => is it still possible to communicate ?
+            if( // Duplex communication possible
+            ((*muxTable)[i].localSocketWriteState == SOCKET_OPENED && (*muxTable)[i].noOutstandingData == SOCKET_OPENED && (*muxTable)[i].remoteSocketWriteState == SOCKET_OPENED && (*muxTable)[i].isRemoteOutstandingData))
+            {
+                do_debug("Duplex communication possible\n");
+            } else if( // Local <= Remote possible
+            (((*muxTable)[i].localSocketWriteState == SOCKET_OPENED) && (*muxTable)[i].isRemoteOutstandingData))
+            {
+                do_debug("Local <= Remote possible\n");
+            } else if( // Local => Remote possible
+            ((*muxTable)[i].noOutstandingData == SOCKET_OPENED) && ((*muxTable)[i].remoteSocketWriteState == SOCKET_OPENED))
+            { 
+                do_debug("Local => Remote possible\n");
+            } else {
+                printf("In mux #%d: State does not allow for communication anymore, close it.\n", i);
+                // Send a CLOSE
+                sendControlPacket((*muxTable)[i], TYPE_CLOSE, state->udpSock_fd);
+                // Remove the mux
+                removeMux(i, muxTable, &muxTableLength);
+                i--; // Compensate for the remove sliding
+            }
+            
+            
         }
     }
 }
 
-void handleIncomingUdp(int sock_fd, muxstate** muxTable, int* muxTableLength, int cliproxy){
+void handleIncomingUdp(int sock_fd, muxstate** muxTable, int* muxTableLength, int cliproxy, globalstate* state){
     struct sockaddr_in localConnect, remoteConnect, udpRemote;
     int destinationLen, nread, nMux, newSock;
     muxstate currentMux;
@@ -289,7 +328,12 @@ void handleIncomingUdp(int sock_fd, muxstate** muxTable, int* muxTableLength, in
         nMux = assignMux(currentMux.sport, currentMux.dport, currentMux.remote_ip, currentMux.randomId, -1, muxTable, muxTableLength, udpRemote);
         do_debug("Assigned to mux #%d\n", nMux);
         
-        if((cliproxy == PROXY) && ((*muxTable)[nMux].state == STATE_INIT)){
+        // First DATA/EMPTY
+        if(
+        (cliproxy == PROXY) &&
+        ((type == TYPE_DATA) || (type == TYPE_EMPTY)) &&
+        ((*muxTable)[nMux].state == STATE_INIT)
+        ){
             do_debug("No regular TCP socket yet.\n");
             newSock = socket(AF_INET, SOCK_STREAM, 0);
             
@@ -316,24 +360,90 @@ void handleIncomingUdp(int sock_fd, muxstate** muxTable, int* muxTableLength, in
                 
                 do_debug("Connected successfully\n");
                 (*muxTable)[nMux].state = STATE_OPENED_DUPLEX;
+                (*muxTable)[nMux].localSocketReadState = SOCKET_OPENED;
+                (*muxTable)[nMux].localSocketWriteState = SOCKET_OPENED;
+                
+                // If it was data, pass it to the decoder
+                if(type == TYPE_DATA){
+                    handleInCoded((*muxTable)[nMux].decoderState, tmp, destinationLen);
+                }
             }
-        } else if(type == TYPE_DATA && (((*muxTable)[nMux].state == STATE_OPENED_DUPLEX) || ((*muxTable)[nMux].state == STATE_OPENED_SIMPLEX))){
+            
+        // DATA
+        } else if(
+            type == TYPE_DATA &&
+            (
+                ((*muxTable)[nMux].state == STATE_OPENED_DUPLEX) ||
+                ((*muxTable)[nMux].state == STATE_OPENED_SIMPLEX)
+            )
+            ){
             do_debug("TYPE_DATA\n");
             (*muxTable)[nMux].state = STATE_OPENED_DUPLEX;
-            // Pass to the decoder
-            handleInCoded((*muxTable)[nMux].decoderState, tmp, destinationLen);
-        } else if(type == TYPE_ACK && (((*muxTable)[nMux].state == STATE_OPENED_DUPLEX) || ((*muxTable)[nMux].state == STATE_OPENED_SIMPLEX))){
+            // Pass to the decoder if it makes sense
+            if((*muxTable)[nMux].localSocketWriteState == SOCKET_OPENED){
+                handleInCoded((*muxTable)[nMux].decoderState, tmp, destinationLen);
+            } else {
+                do_debug("Don't pass the data, as write() would not be possible.\n");
+            }
+            
+        // ACK
+        } else if(
+            type == TYPE_ACK &&
+            (
+            ((*muxTable)[nMux].state == STATE_OPENED_DUPLEX) ||
+            ((*muxTable)[nMux].state == STATE_OPENED_SIMPLEX)
+            )
+            ){
             do_debug("TYPE_ACK\n");
             (*muxTable)[nMux].state = STATE_OPENED_DUPLEX;
             // Pass to the encoder
             onAck((*muxTable)[nMux].encoderState, tmp, destinationLen);
+            
+        // CLOSE
         } else if(type == TYPE_CLOSE){
-            do_debug("TYPE_CLOSE ; closing mux #%d.\n", nMux);
+            printf("TYPE_CLOSE ; closing mux #%d.\n", nMux);
             removeMux(nMux, muxTable, muxTableLength);
-        } else if(type == TYPE_EMPTY){
-            do_debug("TYPE_EMPTY on an already existing mux; nothing to do for mux #%d.\n", nMux);
+            
+        // Non-first EMPTY
+        } else if(type == TYPE_EMPTY && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_EMPTY on an already existing mux; nothing to do for mux #%d.\n", nMux);
+        
+        // READ_CLOSED
+        } else if(type == TYPE_READ_CLOSED && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_READ_CLOSED for mux #%d. Update local states and send back an ACK\n", nMux);
+            (*muxTable)[nMux].remoteSocketReadState = SOCKET_CLOSED_ACKNOWLDGED;
+            sendControlPacket((*muxTable)[nMux], TYPE_READ_CLOSED_ACK, state->udpSock_fd);
+        
+        // WRITE_CLOSED
+        } else if(type == TYPE_WRITE_CLOSED && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_WRITE_CLOSED for mux #%d. Update local states and send back an ACK\n", nMux);
+            (*muxTable)[nMux].remoteSocketWriteState = SOCKET_CLOSED_ACKNOWLDGED;
+            sendControlPacket((*muxTable)[nMux], TYPE_WRITE_CLOSED_ACK, state->udpSock_fd);
+        
+        // WRITE_CLOSED_ACK
+        } else if(type == TYPE_WRITE_CLOSED_ACK && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_WRITE_CLOSED_ACK for mux #%d. Update local state\n", nMux);
+            (*muxTable)[nMux].localSocketWriteState = SOCKET_CLOSED_ACKNOWLDGED;
+            
+        // READ_CLOSED_ACK
+        } else if(type == TYPE_READ_CLOSED_ACK && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_READ_CLOSED_ACK for mux #%d. Update local state\n", nMux);
+            (*muxTable)[nMux].localSocketReadState = SOCKET_CLOSED_ACKNOWLDGED;
+        
+        // NO_OUTSTANDING_DATA
+        } else if(type == TYPE_NO_OUTSTANDING_DATA && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_NO_OUTSTANDING_DATA for mux #%d. Update local state and send ack\n", nMux);
+            (*muxTable)[nMux].isRemoteOutstandingData = false;
+            sendControlPacket((*muxTable)[nMux], TYPE_NO_OUTSTANDING_DATA_ACK, state->udpSock_fd);
+        
+        // NO_OUTSTANDING_DATA_ACK
+        } else if(type == TYPE_NO_OUTSTANDING_DATA_ACK && (*muxTable)[nMux].state != STATE_INIT){
+            printf("TYPE_NO_OUTSTANDING_DATA_ACK for mux #%d. Update local state.\n", nMux);
+            (*muxTable)[nMux].noOutstandingData = SOCKET_CLOSED_ACKNOWLDGED;
+        
+        // Catch-all
         } else {
-            do_debug("Received packet (%u) did not make sense for mux #%d => Send a TYPE_CLOSE\n", type, nMux);
+            printf("Received packet (%u) did not make sense for mux #%d => Send back a TYPE_CLOSE\n", type, nMux);
             sendControlPacket((*muxTable)[nMux], TYPE_CLOSE, sock_fd);
             removeMux(nMux, muxTable, muxTableLength);
         }
@@ -370,7 +480,9 @@ void handleIncomingTcpListener(int sock_fd, muxstate** muxTable, int* muxTableLe
     srand(time(NULL)); // Initialize the PRNG to a random value
     nMux = assignMux(sport, dport, dip, (uint16_t)random(), newSock, muxTable, muxTableLength, remote);
     do_debug("Assigned to mux #%d\n", nMux);
-    (*muxTable)[nMux].state = STATE_OPENED_SIMPLEX;
+    (*muxTable)[nMux].state = STATE_OPENED_SIMPLEX; // The local mux is in simplex state
+    (*muxTable)[nMux].localSocketReadState = SOCKET_OPENED; // The local tcp socket is R/W ok
+    (*muxTable)[nMux].localSocketWriteState = SOCKET_OPENED;
     
     (*muxTable)[nMux].encoderState->nextTimeout.tv_sec = 0;
     (*muxTable)[nMux].encoderState->nextTimeout.tv_usec = 50000;
@@ -380,13 +492,15 @@ void handleIncomingTcpConnected(int sock_fd, muxstate* mux){
     uint8_t buffer[BUFSIZE];
     int nread;
     
-    if((nread = cread(mux->sock_fd, buffer, BUFSIZE)) == 0){
-        do_debug("In handleIncomingTcpConnected : read has returned %d ; close the socket and flag for closing\n", nread);
-        mux->state = STATE_CLOSEAWAITING;
-    } else {
-        do_debug("Mux has received %d bytes from the TCP socket\n", nread);
-        // Pass it to the encoder
-        handleInClear(mux->encoderState, buffer, nread);
+    if(isMoreDataOk(*(mux->encoderState))){
+        if((nread = cread(mux->sock_fd, buffer, BUFSIZE)) == 0){
+            printf("In handleIncomingTcpConnected : read has returned %d\n", nread);
+            mux->localSocketReadState = SOCKET_CLOSED_NOT_ACKNOWLDGED;
+        } else {
+            do_debug("Mux has received %d bytes from the TCP socket\n", nread);
+            // Pass it to the encoder
+            handleInClear(mux->encoderState, buffer, nread);
+        }
     }
 }
 

@@ -26,14 +26,22 @@
 #define TYPE_DATA 0x00
 #define TYPE_ACK 0x01
 #define TYPE_CLOSE 0x02
-#define TYPE_CLOSEAWAITING 0x03
-#define TYPE_EMPTY 0x05
+#define TYPE_EMPTY 0x03
+#define TYPE_READ_CLOSED 0x04
+#define TYPE_READ_CLOSED_ACK 0x05
+#define TYPE_WRITE_CLOSED 0x06
+#define TYPE_WRITE_CLOSED_ACK 0x07
+#define TYPE_NO_OUTSTANDING_DATA 0x08
+#define TYPE_NO_OUTSTANDING_DATA_ACK 0x09
 
-
-#define STATE_CLOSEAWAITING 0x01
 #define STATE_OPENED_SIMPLEX 0x02
 #define STATE_OPENED_DUPLEX 0x03
 #define STATE_INIT 0x04
+
+#define SOCKET_INIT 0x00
+#define SOCKET_OPENED 0x01
+#define SOCKET_CLOSED_NOT_ACKNOWLDGED 0x02
+#define SOCKET_CLOSED_ACKNOWLDGED 0x03
 
 
 typedef struct muxstate_t {
@@ -53,6 +61,18 @@ typedef struct muxstate_t {
 
     // State of the connection
     int state;
+    
+    // State of the TCP socket on both endpoints
+    int localSocketReadState;
+    int localSocketWriteState;
+    int remoteSocketReadState;
+    int remoteSocketWriteState;
+    
+    // Does the remote endpoint still have something to send ?
+    int isRemoteOutstandingData;
+    
+    // States, as sockets
+    int noOutstandingData;
 } muxstate;
 
 int assignMux(uint16_t sport, uint16_t dport, uint32_t remote_ip, uint16_t randomId, int sock_fd, muxstate** statesTable, int* tableLength, struct sockaddr_in udpRemoteAddr);

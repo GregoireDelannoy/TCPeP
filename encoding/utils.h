@@ -34,6 +34,7 @@
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <math.h>
+#include <signal.h>
 
 #define min(a,b) a<b?a:b
 #define max(a,b) a>b?a:b
