@@ -23,17 +23,17 @@ The system consists of a client software on the mobile host and a proxy side, on
 ![This image represents the client/proxy architecture](./overview.png "Architecture Diagram")
 
 Requirements:
-1. Both hosts must run Linux (it also might work on other Unix system.)
-2. You must have root access to the client
-3. The Proxy must be connected to the Internet through a reliable link
-4. You should be able to communicate via UDP between the Client and the Proxy
+1.  Both hosts must run Linux (it also might work on other Unix system.)
+2.  You must have root access to the client
+3.  The Proxy must be connected to the Internet through a reliable link
+4.  You should be able to communicate via UDP between the Client and the Proxy
 
 In order to use the system, you must:
-1. Get the code:
+1.  Get the code:
 `git clone "https://github.com/GregoireDelannoy/TCPeP.git"`
-2. Compile:
+2.  Compile:
 `make all`
-3. Run the Proxy:
+3.  Run the Proxy:
 `./tcpep -P -u <UDP PORT TO LISTEN ON> (-d)`
-4. Run the Client:
+4.  Run the Client:
 `./tcpep -C <PROXY IP ADDRESS> -u <PROXY UDP PORT> -t <TCP PORT TO LISTEN ON> (-d)`
